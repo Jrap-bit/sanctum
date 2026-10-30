@@ -1,0 +1,156 @@
+/* Shared surface and motion language. Imported after the base design system. */
+:root {
+  --ease-out: cubic-bezier(.2,.8,.2,1);
+  --motion-fast: 180ms;
+  --motion-surface: 260ms;
+  --surface-accent: 51 154 128;
+  --surface-shadow: 0 4px 6px rgb(11 38 42 / .025), 0 12px 32px rgb(11 38 42 / .055), inset 0 1px 0 #fff;
+}
+
+/* Keep reading surfaces bright; echo the action tiles in the edges and icons. */
+.app-layout {
+  background: radial-gradient(ellipse at 90% 0%,#dceee8 0%,transparent 44%),
+    radial-gradient(ellipse at 0% 65%,#e8edf6 0%,transparent 52%),#f3f7f7;
+}
+.panel, .record-summary, .auth-screen .auth-card {
+  background-image: radial-gradient(460px circle at var(--spotlight-x,50%) var(--spotlight-y,0%),rgb(var(--surface-accent) / var(--surface-light,0)),transparent 75%),
+    linear-gradient(145deg,#fff,#fbfdfd);
+  border-color: #d4e2e2;
+  box-shadow: var(--surface-shadow);
+  transition: border-color var(--motion-surface) ease, box-shadow var(--motion-surface) ease;
+}
+.panel:focus-within, .record-summary:focus-within { border-color: #93bfb4; }
+.panel-head { border-bottom-color: #e0ebe8; }
+.panel-icon, .state-icon {
+  background: linear-gradient(140deg,#174d3d,#102b30);
+  border: 1px solid #38685b; color: #a5f3cf;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .12),0 3px 9px rgb(17 54 45 / .1);
+}
+
+/* The nav and primary actions share the same ink-to-jade finish as the tiles. */
+.workspace-header {
+  background: radial-gradient(340px circle at var(--spotlight-x,50%) var(--spotlight-y,0%),rgb(119 239 192 / .09),transparent 75%),linear-gradient(120deg,#101f2e,#143b33);
+  border-color: #365951;
+  box-shadow: 0 8px 28px rgb(10 36 38 / .13),inset 0 1px 0 rgb(199 255 230 / .09);
+}
+.workspace-brand .brand-mark { box-shadow: 0 0 18px rgb(119 239 192 / .1),inset 0 1px 0 rgb(255 255 255 / .5); }
+.primary-navigation a, .navigation-toggle, .workspace-account summary {
+  transition: color var(--motion-fast) ease,background var(--motion-fast) ease,box-shadow var(--motion-fast) ease;
+}
+.primary-navigation a[aria-current="page"] { background: linear-gradient(135deg,#d4f6e6,#a9e4cb); box-shadow: 0 3px 12px rgb(0 0 0 / .1),inset 0 1px 0 rgb(255 255 255 / .4); }
+.workspace-account summary > svg { transition: transform var(--motion-fast) var(--ease-out); }
+.workspace-account[open] summary > svg { transform: rotate(-90deg); }
+.account-popover { background: linear-gradient(145deg,#162b35,#102c29); border-color: #3c5f58; color: #f0fcf7; box-shadow: 0 16px 40px rgb(6 25 29 / .24),inset 0 1px 0 rgb(255 255 255 / .07); }
+.account-popover > span { color: #ccdfdd; }
+.account-popover button { border-color: #3b5756; color: #ffc7c7; border-radius: 0; }
+
+.button {
+  position: relative; isolation: isolate; overflow: hidden;
+  border-color: #b9cecd; background: linear-gradient(145deg,#fff,#eef5f3); color: #214a44;
+  box-shadow: 0 2px 4px rgb(12 44 38 / .04),inset 0 1px 0 #fff;
+  transition: transform var(--motion-fast) var(--ease-out),box-shadow var(--motion-surface) ease,border-color var(--motion-fast) ease,background var(--motion-fast) ease;
+}
+.button.primary, .button.primary:hover {
+  color: #effff8; border-color: #37695a;
+  background: radial-gradient(160px circle at var(--spotlight-x,50%) var(--spotlight-y,0%),rgb(119 239 192 / .12),transparent 75%),linear-gradient(125deg,#18503e,#102b30);
+  box-shadow: 0 4px 12px rgb(15 54 43 / .18),inset 0 1px 0 rgb(189 255 221 / .14);
+}
+.button::after {
+  content: ''; position: absolute; inset: -100%; pointer-events: none;
+  background: linear-gradient(110deg,transparent 42%,rgb(255 255 255 / .14) 50%,transparent 58%);
+  opacity: 0; transform: translateX(-40%);
+}
+.button.ghost { background: transparent; box-shadow: none; }
+.button.danger { background: linear-gradient(135deg,#b42332,#851c2a); border-color: #b8434b; color: #fff; box-shadow: 0 3px 10px rgb(133 28 42 / .15); }
+.button.danger:hover { background: #851c2a; }
+.button.danger-outline { background: #fff4f4; border-color: #dc9e9e; color: #a02430; box-shadow: none; }
+.button:disabled, .button:disabled:hover { transform: none; box-shadow: none; }
+.button:disabled::after { display: none; }
+.button:focus-visible { outline: 3px solid #167465; outline-offset: 3px; }
+
+/* Form feedback remains visible for keyboards as well as pointers. */
+.field input, .field textarea, .field select, input.control, select.control, textarea.control, .directory-search, .auth-screen .auth-card .field input {
+  border-color: #b8cbc9; background-color: #fbfdfc;
+  box-shadow: inset 0 1px 2px rgb(10 40 36 / .025);
+  transition: border-color var(--motion-fast) ease,box-shadow var(--motion-fast) ease,background-color var(--motion-fast) ease;
+}
+.directory-search input { box-shadow: none; background: transparent; }
+.field input:focus, .field textarea:focus, .field select:focus, input.control:focus, select.control:focus, textarea.control:focus, .directory-search:focus-within, .auth-screen .auth-card .field input:focus {
+  background-color: #fff; border-color: #247d68; box-shadow: 0 0 0 3px rgb(51 154 128 / .13),0 3px 12px rgb(16 65 50 / .04);
+}
+.field:focus-within > span { color: #075f4e; }
+.pill-choice, .preset-card, .dropzone { transition: border-color var(--motion-surface) ease,background var(--motion-surface) ease,box-shadow var(--motion-surface) ease,transform var(--motion-surface) var(--ease-out); }
+.pill-choice:has(input:checked), .preset-card.selected {
+  border-color: #3a9176; background: #eaf7ef; box-shadow: 0 0 0 2px rgb(51 154 128 / .1),inset 0 1px 0 #fff;
+}
+.dropzone { background: radial-gradient(260px circle at var(--spotlight-x,50%) var(--spotlight-y,0%),rgb(119 239 192 / .1),transparent 75%),linear-gradient(135deg,#edf8f1,#f3f8fb); }
+.progress > span { background: linear-gradient(90deg,#18503e,#4cb68b,#94dfbf); }
+
+/* Small, repeated accents connect the patient and administrative views. */
+.tabs { border-color: #d1e2dd; background: #e6eeec; box-shadow: inset 0 1px 2px rgb(13 47 39 / .03); }
+.tabs a { transition: color var(--motion-fast) ease,background var(--motion-fast) ease,box-shadow var(--motion-fast) ease; }
+.tabs a.selected { color: #d4f9e8; background: linear-gradient(130deg,#1b4d3e,#152e33); box-shadow: 0 2px 8px rgb(14 43 39 / .15),inset 0 1px 0 rgb(255 255 255 / .09); }
+.directory-avatar, .workflow-patient-avatar { background: linear-gradient(145deg,#e2f5ea,#e5edf7); border: 1px solid #bcdacf; box-shadow: inset 0 1px 0 #fff; }
+.directory-open a svg, .workflow-patient-results a > svg { transition: transform var(--motion-fast) var(--ease-out); }
+.table tbody tr { transition: background-color var(--motion-fast) ease; }
+.table tbody tr:focus-within { background: #edf7f2; }
+.table th { background: linear-gradient(110deg,#eef5f2,#edf3f6); }
+.badge { border: 1px solid rgb(34 67 57 / .1); box-shadow: inset 0 1px 0 rgb(255 255 255 / .6); }
+.timeline-entry { border-left-color: #95cdb6; transition: border-color var(--motion-fast) ease,background-color var(--motion-fast) ease; }
+.timeline-entry:focus-within { border-left-color: #247d68; background: #f2f9f5; }
+.workflow-steps li { transition: background var(--motion-surface) ease,color var(--motion-surface) ease; }
+.workflow-steps li.current { background: linear-gradient(120deg,#e3f5e9,#edf5f7); color: #185744; }
+.workflow-steps .current .step-index { background: #185744; box-shadow: 0 0 0 3px rgb(51 154 128 / .1); }
+.structured-section summary::before, .auth-demo-access summary > svg:last-child { transition: background var(--motion-fast) ease,transform var(--motion-fast) var(--ease-out); }
+.structured-section[open] summary::before { background: #184d3c; color: #d8ffeb; }
+
+/* Entrance motion runs once on mount/open; content stays stable while editing. */
+.page-header, .auth-header { animation: surface-arrive 420ms var(--ease-out) backwards; }
+.panel, .record-summary, .auth-screen .auth-card { animation: surface-reveal 480ms ease backwards; }
+.auth-screen .auth-card { animation-delay: 90ms; box-shadow: 0 26px 90px rgb(0 11 27 / .32),0 0 48px rgb(119 239 192 / .06),inset 0 1px 0 #fff; }
+.auth-brand .brand-mark { box-shadow: 0 0 32px rgb(119 239 192 / .18),inset 0 1px 0 rgb(255 255 255 / .2); }
+.workflow-dialog, .dialog { border: 1px solid #b9d6cc; background: linear-gradient(145deg,#fff,#f5faf8); box-shadow: 0 25px 100px rgb(7 33 34 / .25),inset 0 1px 0 #fff; }
+.workflow-dialog[open], .dialog, .workspace-account[open] .account-popover { animation: surface-arrive 240ms var(--ease-out) backwards; }
+.workflow-dialog[open]::backdrop { animation: surface-reveal 200ms ease; }
+.workflow-dialog-icon { color: rgb(var(--tool-accent,119 239 192)); background: linear-gradient(135deg,var(--tool-surface,#124637),#0c1823); border-color: rgb(var(--tool-accent,119 239 192) / .4); box-shadow: inset 0 1px 0 rgb(255 255 255 / .1); }
+.workflow-dialog-close { transition: background var(--motion-fast) ease,color var(--motion-fast) ease; }
+.workflow-patient-results a { transition: background var(--motion-fast) ease; }
+.structured-section[open] .structured-body, .auth-demo-access[open] p { animation: surface-reveal 200ms ease; }
+.notice { animation: surface-reveal 200ms ease; }
+@keyframes surface-arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes surface-reveal { from { opacity: 0; } to { opacity: 1; } }
+
+@media (hover: hover) and (pointer: fine) {
+  .panel:hover, .record-summary:hover, .auth-screen .auth-card:hover { --surface-light: .055; border-color: #b5d3c9; box-shadow: 0 6px 24px rgb(13 53 43 / .08),inset 0 1px 0 #fff; }
+  .auth-screen .auth-card:hover { box-shadow: 0 26px 90px rgb(0 11 27 / .32),0 0 48px rgb(119 239 192 / .09),inset 0 1px 0 #fff; }
+  .button:not(:disabled):hover { transform: translateY(-2px); border-color: #779f92; box-shadow: 0 6px 14px rgb(15 54 43 / .12),inset 0 1px 0 rgb(255 255 255 / .15); }
+  .button:not(:disabled):hover::after { animation: workflow-sweep 750ms var(--ease-out) both; }
+  .button.primary:not(:disabled):hover { border-color: #79c6a1; box-shadow: 0 6px 18px rgb(15 54 43 / .23),0 0 14px rgb(119 239 192 / .08),inset 0 1px 0 rgb(255 255 255 / .18); }
+  .button.ghost:hover { transform: none; box-shadow: none; }
+  .button:not(:disabled):active { transform: translateY(0) scale(.98); }
+  .primary-navigation a:hover { box-shadow: inset 0 1px 0 rgb(255 255 255 / .08); }
+  .workspace-account summary:hover, .navigation-toggle:hover { background: rgb(255 255 255 / .1); }
+  .account-popover button:hover { color: #ffe5e5; }
+  .preset-card:hover:not(.selected) { border-color: #91bfae; box-shadow: 0 8px 22px rgb(15 54 43 / .1),inset 0 1px 0 #fff; transform: translateY(-2px); }
+  .table tbody tr:hover { background: #f0f8f4; }
+  .directory-open a:hover svg, .workflow-patient-results a:hover > svg { transform: translateX(3px); }
+  .directory-search:hover:not(:focus-within), .field input:hover:not(:focus), .field select:hover:not(:focus), .field textarea:hover:not(:focus) { border-color: #8cae9f; }
+  .dropzone:hover { box-shadow: 0 0 0 3px rgb(51 154 128 / .1); }
+  .workflow-dialog-close:hover { background: #dbece4; color: #184d3c; }
+}
+@media (max-width: 1180px) {
+  .primary-navigation.is-open { background: linear-gradient(145deg,#142d36,#12362f); border-color: #3c5f58; animation: surface-arrive 200ms var(--ease-out) backwards; }
+  .primary-navigation a { color: #daeee7; }
+  .primary-navigation a:hover { color: #fff; background: rgb(255 255 255 / .08); }
+  .primary-navigation a[aria-current="page"] { color: #124637; }
+}
+@media (hover: none), (pointer: coarse) {
+  .button:hover, .button.primary:hover { transform: none; }
+  .button::after { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .button:hover, .button.primary:hover, .button:active, .button:not(:disabled):hover, .button:not(:disabled):active, .preset-card:hover, .directory-open a:hover svg, .workflow-patient-results a:hover > svg { transform: none; }
+  .panel, .record-summary, .auth-screen .auth-card { --surface-light: 0 !important; }
+  .button::after { display: none; }
+}

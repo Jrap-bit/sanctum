@@ -1,0 +1,21 @@
+export type Capability = 'patients:read' | 'patients:create' | 'clinical:read' | 'clinical:write' | 'documents:write' | 'summaries:write' | 'indicators:write' | 'reports:write' | 'users:manage' | 'assignments:manage' | 'grants:request' | 'grants:approve' | 'rules:publish' | 'audit:read' | 'operations:manage' | 'patients:delete';
+type Allowed = string[];
+export interface User { id: string; displayName: string; username: string; capabilities: Capability[]; clinicTimezone?: string }
+export interface Patient { id: string; displayName: string; dateOfBirth?: string | null; status: 'active' | 'archived'; assignment?: string; assignedPractitionerIds?: string[]; version: number; allowedActions: Allowed }
+export interface TimelineEvent { id: string; type: string; title: string; eventDate: string | null; createdAt: string; author?: string; status?: string; href?: string; version?: number }
+export interface FollowUp { id: string; title: string; details?: string; dueDate: string | null; state: 'open' | 'completed' | 'cancelled'; source?: string }
+export type Assertion = 'present' | 'denied' | 'possible' | 'unknown';
+export type Temporality = 'current' | 'historical' | 'unknown';
+export interface NoteField { text: string; assertion: Assertion; temporality: Temporality }
+export interface Session { id: string; patientId: string; eventDate: string | null; state: 'draft' | 'finalized'; version: number; text: string; concerns: NoteField[]; observations: NoteField[]; interventions: NoteField[]; medicationReported: NoteField[]; author?: string; updatedAt?: string; amendmentReason?: string; versions?: Session[]; allowedActions: Allowed }
+export interface Document { id: string; filename: string; uploadedAt: string; uploader?: string; pageCount: number; reviewState: string; jobState: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'; progress?: number; version: number; allowedActions: Allowed }
+export interface DocumentPage { pageNumber: number; rawText: string; correctedText: string; reviewState: string; unreadable?: boolean; included?: boolean; version: number }
+export interface Source { id: string; type: 'session' | 'document'; title: string; eventDate: string | null; version: number; wordCount?: number; href?: string }
+export interface Evidence { title: string; href: string; passage?: string }
+export interface ProposedFact { id: string; label: string; text: string; assertion: Assertion; temporality: Temporality; state: 'pending' | 'confirmed' | 'rejected'; evidence: Evidence[]; subject?: string }
+export interface Summary { id: string; kind: string; text: string; originalText: string; reviewState: 'pending' | 'accepted' | 'rejected'; freshness: 'current' | 'stale'; generatedAt: string; model?: string; sources: Source[]; evidence: Evidence[]; facts: ProposedFact[]; reviewHistory?: { action: string; actor: string; at: string }[]; allowedActions: Allowed }
+export interface Indicator { id: string; name: string; outcome: 'matched' | 'not_matched' | 'not_evaluable'; enabled: boolean; freshness: 'current' | 'stale'; ruleVersion: number; explanation: string; conditions: { label: string; value: string }[]; evaluatedAt: string; reviewState?: string; evidence: Evidence[]; allowedActions: Allowed }
+export interface Rule { id: string; name: string; enabled: boolean; version: number; parameters: Record<string, number>; bounds: Record<string, { min: number; max: number }>; description?: string; history?: { version: number; author: string; at: string }[] }
+export interface Health { database: string; storage: string; ocr: string; llm: string }
+export interface ReportManifest { id: string; patientName: string; createdAt: string; author: string; coverage: string; included: { id: string; label: string; version: number; reviewState?: string }[]; excluded: { label: string; reason: string }[]; freshness: 'current' | 'stale' }
+export interface Job { id: string; state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'; progress?: number; resultId?: string; message?: string }
