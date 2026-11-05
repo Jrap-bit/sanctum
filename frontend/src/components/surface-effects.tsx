@@ -19,12 +19,17 @@ export function SurfaceEffects() {
       frame = window.requestAnimationFrame(() => {
         frame = 0;
         if (!latest || !(latest.target instanceof Element)) return;
+        const lights: {element: HTMLElement; x: number; y: number}[] = [];
         let surface = latest.target.closest<HTMLElement>(surfaces);
         while (surface) {
           const rect = surface.getBoundingClientRect();
-          surface.style.setProperty('--spotlight-x', `${latest.clientX - rect.left}px`);
-          surface.style.setProperty('--spotlight-y', `${latest.clientY - rect.top}px`);
+          lights.push({element: surface, x: latest.clientX - rect.left, y: latest.clientY - rect.top});
           surface = surface.parentElement?.closest<HTMLElement>(surfaces) || null;
+        }
+        // Batch layout reads before style writes across nested surfaces.
+        for (const light of lights) {
+          light.element.style.setProperty('--spotlight-x', `${light.x}px`);
+          light.element.style.setProperty('--spotlight-y', `${light.y}px`);
         }
         latest = null;
       });

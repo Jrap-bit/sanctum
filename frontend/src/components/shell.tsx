@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import type { Capability } from '@/lib/types';
 import { Icon, type IconName } from './icon';
+import { Modal } from './modal';
 
 const navigation: { href: string; label: string; icon: IconName; cap: Capability }[] = [
   { href: '/patients', label: 'Patients', icon: 'patient', cap: 'patients:read' },
@@ -18,7 +19,7 @@ const navigation: { href: string; label: string; icon: IconName; cap: Capability
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const { user, loading, has, logout } = useAuth();
+  const { user, loading, error, refresh, has, logout } = useAuth();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -45,7 +46,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (loading) return <div className="center-screen"><span className="spinner"/>Opening workspace…</div>;
-  if (!user) return <div className="center-screen">Sign in to continue.</div>;
+  if (!user) return <main className="center-screen"><div className="state" role="alert"><strong>{error ? 'Workspace unavailable' : 'Sign in to continue'}</strong>{error && <p>{error.message}</p>}<div className="row">{error && <button className="button" onClick={() => void refresh().catch(() => {})}>Retry connection</button>}<Link className="button primary" href="/login">Sign in</Link></div></div></main>;
 
   const links = navigation.filter(link => has(link.cap)
     || (link.href === '/access/grants' && has('grants:approve'))
@@ -98,23 +99,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </details>
     </header>
-    {confirmLogout && <div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="logout-title" onKeyDown={event => {
-      if (event.key === 'Escape' && !signingOut) setConfirmLogout(false);
-      if (event.key === 'Tab') {
-        const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
-        const first = buttons[0], last = buttons[buttons.length - 1];
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-      }
-    }}>
-      <h2 id="logout-title">Sign out?</h2><p>Save any open work before leaving.</p>
+    <Modal open={confirmLogout} busy={signingOut} onClose={() => setConfirmLogout(false)} labelledBy="logout-title" describedBy="logout-description">
+      <h2 id="logout-title">Sign out?</h2><p id="logout-description">Save any open work before leaving.</p>
       {logoutError && <p className="notice danger" role="alert">{logoutError}</p>}
-      <div className="actions"><button autoFocus className="button ghost" disabled={signingOut} onClick={() => setConfirmLogout(false)}>Cancel</button>
-      <button className="button danger" disabled={signingOut} onClick={() => void signOut()}>{signingOut ? 'Signing out…' : 'Confirm sign out'}</button></div>
-    </div></div>}
+      <div className="actions"><button type="button" autoFocus className="button ghost" disabled={signingOut} onClick={() => setConfirmLogout(false)}>Cancel</button>
+      <button type="button" className="button danger" disabled={signingOut} onClick={() => void signOut()}>{signingOut ? 'Signing out…' : 'Confirm sign out'}</button></div>
+    </Modal>
     <main id="workspace-content" className="main-content" tabIndex={-1}>{children}</main>
   </div>;
 }
 
-export function Require({cap,children}:{cap:Capability;children:React.ReactNode}){const {has,loading}=useAuth();if(loading)return <div className="state">Checking access…</div>;if(!has(cap))return <div className="state error"><strong>Access denied</strong><p>Your account needs access to this area.</p></div>;return <>{children}</>;}
-export function PatientTabs({id}:{id:string}){const path=usePathname();const {has}=useAuth();const tabs:{label:string;suffix:string;icon:IconName;cap?:Capability}[]=[{label:'Overview',suffix:'',icon:'home'},{label:'Sessions',suffix:'/sessions/new',icon:'notes',cap:'clinical:write'},{label:'Documents',suffix:'/documents',icon:'document',cap:'documents:write'},{label:'AI summaries',suffix:'/summaries/new',icon:'sparkle',cap:'summaries:write'},{label:'Indicators',suffix:'/indicators',icon:'indicator',cap:'clinical:read'},{label:'Reports',suffix:'/reports/new',icon:'report',cap:'reports:write'}];return <nav className="tabs" aria-label="Patient workspace">{tabs.filter(tab=>!tab.cap||has(tab.cap)).map(({label,suffix,icon})=><Link key={label} className={(suffix?path.includes(suffix.split('/')[1]):path===`/patients/${id}`)?'selected':''} href={`/patients/${encodeURIComponent(id)}${suffix}`}><Icon name={icon} size={17}/>{label}</Link>)}</nav>;}
+export function Require({cap,children}:{cap:Capability;children:React.ReactNode}){const {has,loading}=useAuth();if(loading)return <div className="state">Checking access…</div>;if(!has(cap))return <div className="state error" role="alert"><strong>Access denied</strong><p>Your account needs access to this area.</p></div>;return <>{children}</>;}
+export function PatientTabs({id}:{id:string}){const path=usePathname();const {has}=useAuth();const tabs:{label:string;suffix:string;icon:IconName;cap?:Capability}[]=[{label:'Overview',suffix:'',icon:'home'},{label:'Sessions',suffix:'/sessions/new',icon:'notes',cap:'clinical:write'},{label:'Documents',suffix:'/documents',icon:'document',cap:'clinical:read'},{label:'AI summaries',suffix:'/summaries/new',icon:'sparkle',cap:'summaries:write'},{label:'Indicators',suffix:'/indicators',icon:'indicator',cap:'clinical:read'},{label:'Reports',suffix:'/reports/new',icon:'report',cap:'reports:write'}];return <nav className="tabs" aria-label="Patient workspace">{tabs.filter(tab=>!tab.cap||has(tab.cap)).map(({label,suffix,icon})=><Link key={label} aria-current={(suffix?path.includes(suffix.split('/')[1]):path===`/patients/${id}`)?'page':undefined} className={(suffix?path.includes(suffix.split('/')[1]):path===`/patients/${id}`)?'selected':''} href={`/patients/${encodeURIComponent(id)}${suffix}`}><Icon name={icon} size={17}/>{label}</Link>)}</nav>;}

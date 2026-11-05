@@ -33,7 +33,7 @@ export default function PatientsPage() {
         <button className="button" onClick={() => void reload()} disabled={loading}>Refresh</button>
       </div>
       {!loading && !error && <p className="directory-count" aria-live="polite">{search ? `${patients.length} of ${data?.items.length || 0}` : patients.length} {patients.length === 1 && !search ? 'patient' : 'patients'}</p>}
-      <State loading={loading} error={error} empty={!patients.length} emptyTitle={search ? 'No matching patients' : `No ${status} patients`} emptyMessage={search ? 'Try another name or record ID.' : status === 'archived' ? 'Archived patient records will appear here.' : has('patients:create') ? 'Add a patient to create a record.' : 'Ask your administrator to assign patient access.'}>
+      <State loading={loading} error={error} retry={()=>void reload()} empty={!patients.length} emptyTitle={search ? 'No matching patients' : `No ${status} patients`} emptyMessage={search ? 'Try another name or record ID.' : status === 'archived' ? 'Archived patient records will appear here.' : has('patients:create') ? 'Add a patient to create a record.' : 'Ask your administrator to assign patient access.'}>
         <table className="table directory-table">
           <caption className="sr-only">{status === 'active' ? 'Active' : 'Archived'} patient records</caption>
           <thead><tr><th scope="col">Patient</th><th scope="col">Record ID</th><th scope="col">Practitioner</th><th scope="col">Status</th><th scope="col"><span className="sr-only">Open record</span></th></tr></thead>

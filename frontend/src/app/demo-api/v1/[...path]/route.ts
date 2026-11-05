@@ -13,7 +13,12 @@ const userOf = (request:NextRequest) => { const store=demoStore();const user=sto
 const cap = (user:User, capability:string) => user.capabilities.includes(capability as User['capabilities'][number]);
 const clinical = (user:User, patient:Patient) => user.id === 'demo-oversight' || Boolean(patient.assignedPractitionerIds?.includes(user.id)) || demoStore().grants.some(g=>g.patientId===patient.id&&g.subjectId===user.id&&g.state==='approved');
 const audit = (action:string,user:User,targetId:string) => demoStore().audit.unshift({id:id('event'),action,actorId:user.id,targetId,result:'success',requestId:id('req'),at:now()});
-const noteActions = (user:User,session:Session) => clinical(user,demoStore().patients.find(p=>p.id===session.patientId)!) && cap(user,'clinical:write') ? (session.state==='draft' ? ['edit','finalize'] : ['amend']) : [];
+const noteActions = (user:User,session:Session) => {
+  const patient=demoStore().patients.find(p=>p.id===session.patientId);
+  if (!patient || patient.status!=='active' || !clinical(user,patient) || !cap(user,'clinical:write')) return [];
+  if (session.state==='draft') return session.author===user.displayName ? ['edit','finalize'] : [];
+  return ['amend'];
+};
 
 function pdf(text:string) {
   const safe = text.replace(/[^\x20-\x7e]/g,' ').replace(/[()\\]/g,'\\$&').slice(0,240);

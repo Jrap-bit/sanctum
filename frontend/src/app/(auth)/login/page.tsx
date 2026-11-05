@@ -1,8 +1,8 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useResource } from '@/lib/hooks';
 import type { Health } from '@/lib/types';
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [error, setError] = useState<Error | null>(null);
   const router = useRouter();
   const params = useSearchParams();
@@ -22,16 +23,24 @@ export default function LoginPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     setError(null);
     try {
       await api('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
       await refresh();
       const next = params.get('next');
-      router.replace(next && next.startsWith('/') && !next.startsWith('//') ? next : '/patients');
-    } catch {
-      setError(new Error('Sign-in failed. Check your username and password.'));
+      let destination = new URL('/patients', window.location.origin);
+      try {
+        const proposed = new URL(next || '/patients', window.location.origin);
+        if (proposed.origin === window.location.origin && proposed.pathname !== '/login') destination = proposed;
+      } catch { /* A malformed return path falls back to the directory. */ }
+      router.replace(destination.pathname + destination.search + destination.hash);
+    } catch (failure) {
+      setError(failure instanceof ApiError && failure.status === 401 ? new Error('Sign-in failed. Check your username and password.') : failure as Error);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
@@ -54,8 +63,8 @@ export default function LoginPage() {
         {health.data?.database && health.data.database !== 'healthy' && <div className="notice warning">The records service needs attention.</div>}
         <Message error={error}/>
         <form onSubmit={submit}>
-          <Field label="Username"><input autoComplete="username" required value={username} onChange={e => setUsername(e.target.value)}/></Field>
-          <Field label="Password"><div className="auth-password"><input type={show ? 'text' : 'password'} autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)}/><button type="button" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>{show ? 'Hide' : 'Show'}</button></div></Field>
+          <Field label="Username"><input autoComplete="username" autoCapitalize="none" spellCheck={false} maxLength={64} disabled={busy} required value={username} onChange={e => setUsername(e.target.value)}/></Field>
+          <Field label="Password"><div className="auth-password"><input type={show ? 'text' : 'password'} autoComplete="current-password" maxLength={128} disabled={busy} required value={password} onChange={e => setPassword(e.target.value)}/><button type="button" disabled={busy} aria-pressed={show} onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>{show ? 'Hide' : 'Show'}</button></div></Field>
           <button className="button primary auth-submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}<span aria-hidden="true">↗</span></button>
         </form>
         <p className="auth-help"><span>Need access or a password reset?</span><span>Contact your clinic administrator.</span></p>

@@ -16,14 +16,20 @@ export default function DocumentsPage() {
   const {has} = useAuth();
   const {data, loading, error, reload, setData} = useResource<{items: Document[]}>(base);
   const action = useAction();
+  const [pollError,setPollError]=useState<Error|null>(null);
   const hasPending = data?.items.some(d => ['queued', 'running'].includes(d.jobState)) || false;
   useEffect(() => {
     if (!hasPending) return;
-    let live = true;
-    const timer = window.setInterval(() => {
-      void api<{items: Document[]}>(base).then(result => {if (live) setData(result);}).catch(() => {});
-    }, 3000);
-    return () => {live = false; window.clearInterval(timer);};
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const result = await api<{items: Document[]}>(base, {signal: controller.signal});
+        if (!controller.signal.aborted) {setData(result); setPollError(null); timer = setTimeout(poll, 3000);}
+      } catch (failure) {if (!controller.signal.aborted) setPollError(failure as Error);}
+    };
+    timer = setTimeout(poll, 3000);
+    return () => {controller.abort(); clearTimeout(timer);};
   }, [base, hasPending, setData]);
   const process = async (documentId: string, operation: string) => {
     const result = await action.run(() => post(`${base}/${encodeURIComponent(documentId)}/${operation}`, {}));
@@ -60,6 +66,7 @@ export default function DocumentsPage() {
         try { details = JSON.parse(xhr.responseText); } catch { /* Proxy may return a non-JSON error. */ }
         setUploadError(new ApiError(xhr.status, details.code || 'UPLOAD_FAILED', details.message || `Upload failed (${xhr.status}). Please try again.`, undefined, details.requestId));
         if (xhr.status === 401) window.dispatchEvent(new Event('sanctum:expired'));
+        if ([403,404].includes(xhr.status)) window.dispatchEvent(new CustomEvent('sanctum:denied',{detail:{path:base,status:xhr.status}}));
       }
     };
     xhr.onerror = () => setUploadError(new Error('Upload could not be confirmed. Check your connection, then refresh the file list before retrying.'));
@@ -75,19 +82,19 @@ export default function DocumentsPage() {
       <div className="upload-row"><label className="dropzone"><Icon name="upload" size={24}/><strong>{file ? file.name : 'Choose a file'}</strong><span>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected` : 'PDF, JPEG or PNG'}</span>
         <input ref={input} disabled={uploading} aria-label="Select historical document" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => {setFile(e.target.files?.[0] || null); setUploadError(null); setNotice('');}}/>
       </label><button className="button primary" disabled={!file || uploading} onClick={upload}>{uploading ? 'Uploading…' : 'Upload file'} <Icon name="arrow" size={16}/></button></div>
-      {uploading && <div role="status" style={{marginTop: 10}}><div className="progress"><span style={{width: `${progress}%`}}/></div><small>{progress < 100 ? `${progress}% sent` : 'File sent. Validating and saving…'}</small></div>}
+      {uploading && <div role="status" style={{marginTop: 10}}><div className="progress" role="progressbar" aria-label="Document upload" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span style={{transform: `scaleX(${progress / 100})`}}/></div><small>{progress < 100 ? `${progress}% sent` : 'File sent. Validating and saving…'}</small></div>}
       <Message error={uploadError} success={notice}/>
     </Panel>}
-    <Message error={action.error}/>
-    <Panel title="Your files" icon="document" action={<button className="button small-button" onClick={() => void reload()}>Refresh files</button>}>
-      <State loading={loading} error={error} empty={!data?.items.length}>{data?.items.map(d => <div key={d.id} className="list-item row between"><div>
+    <Message error={action.error || pollError}/>
+    <Panel title="Your files" icon="document" action={<button className="button small-button" disabled={loading} onClick={() => {setPollError(null); void reload();}}>Refresh files</button>}>
+      <State loading={loading} error={error} retry={()=>void reload()} empty={!data?.items.length}>{data?.items.map(d => <div key={d.id} className="list-item row between"><div>
         <strong>{d.filename}</strong><p>Uploaded <TimeText date={d.uploadedAt}/> · {d.pageCount} page(s) · {d.uploader || 'Unknown uploader'}</p>
         <div className="row"><Badge>{d.reviewState}</Badge><Badge>{d.jobState === 'not_started' ? 'Ready for extraction' : d.jobState}</Badge>{d.jobState === 'running' && <span>{d.progress || 0}% processed</span>}</div>{d.processingMessage && <p role="status">{d.processingMessage}</p>}
       </div><div className="row"><button className="button small-button" disabled={action.pending} onClick={() => void action.run(() => protectedDownload(`${base}/${encodeURIComponent(d.id)}/original`, d.filename))}>Download original</button>
         {has('documents:write') && d.jobState === 'not_started' && <button className="button small-button" disabled={action.pending} onClick={() => void process(d.id, 'process')}>Start extraction</button>}
         {has('documents:write') && ['failed', 'cancelled'].includes(d.jobState) && <button className="button small-button" disabled={action.pending} onClick={() => void process(d.id, 'retry')}>Retry extraction</button>}
         {has('documents:write') && ['queued', 'running'].includes(d.jobState) && <button className="button small-button" disabled={action.pending} onClick={() => void process(d.id, 'cancel')}>Cancel extraction</button>}
-        {d.allowedActions?.includes('extraction') && <Link className="button small-button" href={`${base.replace('/api/v1', '')}/${encodeURIComponent(d.id)}/extraction`}>View extracted text</Link>}
+        {d.allowedActions?.includes('extraction') && <Link className="button small-button" href={`${base}/${encodeURIComponent(d.id)}/extraction`}>View extracted text</Link>}
         {d.allowedActions?.includes('review') && <Link className="button small-button" href={`${base}/${encodeURIComponent(d.id)}/review`}>Review pages</Link>}
       </div></div>)}</State>
     </Panel>
