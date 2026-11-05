@@ -8,7 +8,7 @@ export type Assertion = 'present' | 'denied' | 'possible' | 'unknown';
 export type Temporality = 'current' | 'historical' | 'unknown';
 export interface NoteField { text: string; assertion: Assertion; temporality: Temporality }
 export interface Session { id: string; patientId: string; eventDate: string | null; state: 'draft' | 'finalized'; version: number; text: string; concerns: NoteField[]; observations: NoteField[]; interventions: NoteField[]; medicationReported: NoteField[]; author?: string; updatedAt?: string; amendmentReason?: string; versions?: Session[]; allowedActions: Allowed }
-export interface Document { id: string; filename: string; uploadedAt: string; uploader?: string; pageCount: number; reviewState: string; jobState: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'; progress?: number; version: number; allowedActions: Allowed }
+export interface Document { id: string; filename: string; uploadedAt: string; uploader?: string; pageCount: number; reviewState: string; jobState: 'not_started' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'; progress?: number; processingMessage?: string | null; version: number; allowedActions: Allowed }
 export interface DocumentPage { pageNumber: number; rawText: string; correctedText: string; reviewState: string; unreadable?: boolean; included?: boolean; version: number }
 export interface Source { id: string; type: 'session' | 'document'; title: string; eventDate: string | null; version: number; wordCount?: number; href?: string }
 export interface Evidence { title: string; href: string; passage?: string }

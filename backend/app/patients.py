@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 
-from .auth import CurrentUser, Db, UserOutput, public_user
+from .auth import CurrentUser, Db
 from .config import get_settings
 from .crypto import decrypt, encrypt
 from .models import AuditEvent, ClinicalNote, FollowUp, Patient, PatientAccess, PatientEvent, User
@@ -314,13 +314,3 @@ def update_task(patient_id: UUID, task_id: UUID, data: TaskUpdate, user: Current
     result = task_output(task)
     db.commit()
     return result
-
-
-@router.get("/admin/users", response_model=dict[str, list[UserOutput]])
-def list_users(user: CurrentUser, db: Db, request: Request):
-    # Supports the existing new-patient practitioner picker; account mutations remain CLI-only.
-    require(user, "users:manage")
-    items = [public_user(u) for u in db.scalars(select(User).where(User.active.is_(True)).order_by(User.display_name))]
-    record_audit(db, request, user, "user.list", None)
-    db.commit()
-    return {"items": items}

@@ -212,3 +212,22 @@ def test_audit_failure_rolls_back_finalization(setup, monkeypatch):
         assert client.post(url(patient, note) + "/finalize", json={"expectedVersion": note["version"]}).status_code == 503
     current = client.get(url(patient, note)).json()
     assert current["state"] == "draft" and current["version"] == note["version"]
+
+
+def test_session_creation_after_future_follow_up(setup):
+    from app.patients import clinic_today
+    client, _, _ = setup
+    patient = create(client)
+    future = (clinic_today() + timedelta(days=7)).isoformat()
+    follow_up = client.post(path(patient) + '/follow-ups', json={'title': 'Synthetic next appointment', 'dueDate': future})
+    assert follow_up.status_code == 201
+    rejected = client.post(path(patient) + '/sessions', json={'eventDate': future})
+    assert rejected.status_code == 422
+    assert 'future' in rejected.json()['fieldErrors']['eventDate']
+    for event_date in (clinic_today().isoformat(), None):
+        note = new_note(client, patient, event_date)
+        assert note['state'] == 'draft'
+        assert note['eventDate'] == event_date
+        assert client.get(url(patient, note)).status_code == 200
+    tasks = client.get(path(patient) + '/follow-ups').json()['items']
+    assert next(t for t in tasks if t['id'] == follow_up.json()['id'])['dueDate'] == future

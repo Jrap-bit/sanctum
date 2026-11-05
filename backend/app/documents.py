@@ -1,0 +1,206 @@
+"""Patient-scoped encrypted originals; OCR/review is a separate next stage."""
+from datetime import datetime
+from hashlib import sha256
+from io import BytesIO
+from pathlib import PurePosixPath
+from urllib.parse import quote
+from uuid import UUID, uuid4
+import warnings
+
+from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel
+from PIL import Image, UnidentifiedImageError
+from pypdf import PdfReader
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile
+from starlette.formparsers import MultiPartParser, MultiPartException
+
+from .auth import CurrentUser, Db, get_current_user
+from .crypto import encrypt, decrypt, cipher
+from cryptography.fernet import InvalidToken
+from .models import StoredDocument, User, PatientEvent, ExtractionJob
+from .patients import require, scoped_patient, record_audit
+
+router = APIRouter(prefix='/api/v1/patients/{patient_id}/documents', tags=['Documents'])
+MAX_BYTES = 25 * 1024 * 1024
+MAX_BODY = MAX_BYTES + 64 * 1024
+MAX_PAGES = 500
+MAX_PIXELS = 20_000_000
+
+class MemoryMultipartParser(MultiPartParser):
+    # Originals remain in memory until encrypted; never spool plaintext to disk.
+    spool_max_size = MAX_BODY + 1
+
+class DocumentOutput(BaseModel):
+    id: str
+    filename: str
+    uploadedAt: datetime
+    uploader: str
+    pageCount: int
+    sizeBytes: int
+    mediaType: str
+    reviewState: str = 'unreviewed'
+    jobState: str = 'not_started'
+    progress: int = 0
+    processingMessage: str | None = None
+    version: int = 1
+    allowedActions: list[str] = ['download']
+
+
+def output(db, row):
+    meta = decrypt(row.metadata_payload, f'document-meta:{row.patient_id}:{row.id}')
+    job = db.scalar(select(ExtractionJob).where(ExtractionJob.document_id == row.id))
+    state = job.state if job else 'not_started'
+    actions = ['download'] + (['extraction'] if state == 'completed' else [])
+    return DocumentOutput(id=row.id, filename=meta['filename'], uploadedAt=row.created_at,
+                          uploader=db.get(User, row.uploaded_by).display_name,
+                          pageCount=row.page_count, sizeBytes=row.size_bytes, mediaType=row.media_type, jobState=state,
+                          progress=int(job.completed_pages * 100 / row.page_count) if job else 0,
+                          processingMessage=job.message if job else None, allowedActions=actions)
+
+
+def validate_file(raw, filename, declared_type):
+    if not raw:
+        raise HTTPException(422, 'The file is empty. Choose a PDF, JPEG or PNG.')
+    name = PurePosixPath((filename or '').replace('\\', '/')).name
+    name = ''.join(c for c in name if c.isprintable()).strip()
+    if not name or len(name) > 240:
+        raise HTTPException(422, 'Use a filename between 1 and 240 characters.')
+    ext = PurePosixPath(name).suffix.lower()
+    expected = {'.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg'}.get(ext)
+    if not expected or declared_type not in {expected, 'application/octet-stream', None}:
+        raise HTTPException(415, 'Choose a PDF, JPEG or PNG with its correct filename extension.')
+    try:
+        if expected == 'application/pdf':
+            if not raw.startswith(b'%PDF-'):
+                raise ValueError('Invalid PDF signature')
+            reader = PdfReader(BytesIO(raw), strict=True)
+            if reader.is_encrypted:
+                raise HTTPException(422, 'Password-protected PDFs are not supported. Upload an unlocked copy.')
+            pages = len(reader.pages)
+            if not 1 <= pages <= MAX_PAGES:
+                raise HTTPException(422, f'PDFs must contain between 1 and {MAX_PAGES} pages.')
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter('error', Image.DecompressionBombWarning)
+                with Image.open(BytesIO(raw)) as image:
+                    if image.format != ('PNG' if expected == 'image/png' else 'JPEG'):
+                        raise ValueError('Image format mismatch')
+                    if image.width * image.height > MAX_PIXELS:
+                        raise HTTPException(422, 'Images must be no larger than 20 megapixels.')
+                    if getattr(image, 'n_frames', 1) != 1:
+                        raise HTTPException(422, 'Upload a single-page image, not an animated image.')
+                    image.verify()
+                with Image.open(BytesIO(raw)) as image:
+                    image.load()  # Detect truncated image data before storing it.
+            pages = 1
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(422, 'This file is damaged or is not a valid PDF, JPEG or PNG.') from None
+    return name, expected, pages
+
+
+def save_document(db, user, request, patient_id, raw, filename, content_type):
+    user = get_current_user(request, db)
+    require(user, 'documents:write')
+    name, media_type, pages = validate_file(raw, filename, content_type)
+    # Lock after reading the upload, then recheck scope and archive status.
+    patient = scoped_patient(db, user, patient_id, clinical=True, lock=True)
+    if patient.status != 'active':
+        raise HTTPException(409, 'Reactivate the patient before uploading documents.')
+    digest = sha256(raw).hexdigest()
+    if db.scalar(select(StoredDocument.id).where(StoredDocument.patient_id == patient.id, StoredDocument.digest == digest)):
+        raise HTTPException(409, 'This file is already stored for this patient. Use the existing original.')
+    doc_id = str(uuid4())
+    context = f'document:{patient.id}:{doc_id}'.encode() + b'\0'
+    row = StoredDocument(id=doc_id, patient_id=patient.id, uploaded_by=user.id, digest=digest,
+        metadata_payload=encrypt({'filename': name}, f'document-meta:{patient.id}:{doc_id}'),
+        original_payload=cipher().encrypt(context + raw), media_type=media_type,
+        page_count=pages, size_bytes=len(raw))
+    db.add(row)
+    db.add(PatientEvent(patient_id=patient.id, actor_id=user.id, kind='document', title='Document uploaded', event_date=None, version=1))
+    record_audit(db, request, user, 'document.upload', row.id)
+    try:
+        db.flush()
+        result = output(db, row)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, 'This file is already stored for this patient.') from None
+    return result
+
+
+@router.post('', response_model=DocumentOutput, status_code=201)
+async def upload_document(patient_id: UUID, user: CurrentUser, db: Db, request: Request):
+    require(user, 'documents:write')
+    patient = scoped_patient(db, user, patient_id, clinical=True)
+    if patient.status != 'active':
+        raise HTTPException(409, 'Reactivate the patient before uploading documents.')
+    db.rollback()  # Do not keep a database transaction open during network upload.
+    if not request.headers.get('content-type', '').lower().startswith('multipart/form-data;'):
+        raise HTTPException(415, 'Send one file as multipart form data.')
+    async def bounded_stream():
+        total = 0
+        async for chunk in request.stream():
+            total += len(chunk)
+            if total > MAX_BODY:
+                raise HTTPException(413, 'Choose a file no larger than 25 MB.')
+            yield chunk
+    try:
+        form = await MemoryMultipartParser(request.headers, bounded_stream(), max_files=1, max_fields=0).parse()
+    except MultiPartException:
+        raise HTTPException(422, 'Send exactly one file in the file field.') from None
+    try:
+        file = form.get('file')
+        if not isinstance(file, UploadFile) or len(form.multi_items()) != 1:
+            raise HTTPException(422, 'Send exactly one file in the file field.')
+        raw = await file.read(MAX_BYTES + 1)
+        if len(raw) > MAX_BYTES:
+            raise HTTPException(413, 'Choose a file no larger than 25 MB.')
+        return await run_in_threadpool(save_document, db, user, request, patient_id, raw, file.filename, file.content_type)
+    finally:
+        await form.close()
+
+
+@router.get('', response_model=dict[str, list[DocumentOutput]])
+def list_documents(patient_id: UUID, user: CurrentUser, db: Db, request: Request):
+    patient = scoped_patient(db, user, patient_id, clinical=True)
+    rows = db.scalars(select(StoredDocument).where(StoredDocument.patient_id == patient.id)
+                      .order_by(StoredDocument.created_at.desc(), StoredDocument.id)).all()
+    result = {'items': [output(db, row) for row in rows]}
+    record_audit(db, request, user, 'document.list', patient.id)
+    db.commit()
+    return result
+
+
+@router.get('/{document_id}/original')
+def download_document(patient_id: UUID, document_id: UUID, user: CurrentUser, db: Db, request: Request):
+    patient = scoped_patient(db, user, patient_id, clinical=True)
+    row = db.scalar(select(StoredDocument).where(StoredDocument.id == str(document_id), StoredDocument.patient_id == patient.id))
+    if row is None:
+        raise HTTPException(404, 'Document unavailable.')
+    meta = output(db, row)
+    raw = original_bytes(row)
+    record_audit(db, request, user, 'document.download', row.id)
+    db.commit()
+    return Response(raw, media_type=row.media_type, headers={
+        'Content-Disposition': "attachment; filename*=UTF-8''" + quote(meta.filename, safe=''),
+        'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff'})
+
+
+def original_bytes(row):
+    try:
+        decoded = cipher().decrypt(row.original_payload)
+        context = f'document:{row.patient_id}:{row.id}'.encode() + b'\0'
+        if not decoded.startswith(context):
+            raise ValueError('Context mismatch')
+        raw = decoded[len(context):]
+        if len(raw) != row.size_bytes or sha256(raw).hexdigest() != row.digest:
+            raise ValueError('Integrity mismatch')
+    except (InvalidToken, ValueError):
+        raise HTTPException(503, 'Protected document could not be read.') from None
+    return raw
