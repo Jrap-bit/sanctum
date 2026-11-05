@@ -4,11 +4,12 @@ from getpass import getpass
 import re
 from uuid import uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+from .account_service import invalidate_credentials
 from .database import SessionLocal
-from .models import AuditEvent, LoginSession, User
+from .models import AuditEvent, User
 from .security import ROLE_CAPABILITIES, passwords
 
 
@@ -65,10 +66,14 @@ def main():
                 raise ValueError("Account not found.")
             if new_password is not None:
                 user.password_hash = passwords.hash(new_password)
+                user.credentials_ready = True
+                user.password_reset_required = False
             else:
+                if args.command == "activate-user" and not user.credentials_ready:
+                    raise ValueError("Complete activation or run reset-password to set this account's first password.")
                 user.active = args.command == "activate-user"
             # Even reactivation must never revive a previous session.
-            db.execute(delete(LoginSession).where(LoginSession.user_id == user.id))
+            invalidate_credentials(db, user.id)
             operator_event(db, f"user.{args.command}", user.id)
             db.commit()
             print("Account updated. Previous login sessions have been removed.")

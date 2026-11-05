@@ -7,15 +7,21 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException
 
+from .admin_users import router as admin_router
 from .auth import router as auth_router
 from .config import get_settings
 from .patients import router as patient_router
 from .sessions import router as session_router
+from .documents import router as document_router
+from .processing import router as processing_router
 
-app = FastAPI(title="Sanctum API", version="0.4.0")
+app = FastAPI(title="Sanctum API", version="0.5.0")
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(patient_router)
 app.include_router(session_router)
+app.include_router(document_router)
+app.include_router(processing_router)
 
 
 def error(request, status, code, message, fields=None):

@@ -1,14 +1,95 @@
 'use client';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Require } from '@/components/shell';
 import { Icon } from '@/components/icon';
-import { Badge, ConfirmAction, Message, Panel, State, TimeText, WorkflowSteps, SectionHeader } from '@/components/ui';
-import { API_BASE, patientPath, post, protectedDownload } from '@/lib/api';
+import { Badge, Message, Panel, State, TimeText, WorkflowSteps, SectionHeader } from '@/components/ui';
+import { API_BASE, ApiError, api, post, patientPath, protectedDownload } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useAction, useResource } from '@/lib/hooks';
 import type { Document } from '@/lib/types';
-export default function DocumentsPage() { const id = useParams<{patientId:string}>().patientId; const base = `${patientPath(id)}/documents`; const { data, loading, error, reload } = useResource<{items:Document[]}>(base); const action = useAction(); const [file, setFile] = useState<File|null>(null); const [progress, setProgress] = useState(0); const [uploadError, setUploadError] = useState<Error|null>(null);
-  const upload = () => { if (!file) return; if (file.size > 25 * 1024 * 1024 || !['application/pdf','image/jpeg','image/png'].includes(file.type)) { setUploadError(new Error('Choose a PDF, JPEG or PNG up to 25 MB.')); return; } setUploadError(null); const xhr = new XMLHttpRequest(); const body = new FormData(); body.append('file', file); xhr.open('POST', `${API_BASE}${base}`); xhr.withCredentials = true; xhr.upload.onprogress = e => { if (e.lengthComputable) setProgress(Math.round(e.loaded * 100 / e.total)); }; xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) { setFile(null); setProgress(0); void reload(); } else setUploadError(new Error(xhr.status === 409 ? 'A possible duplicate was found for this patient. Review the existing document before retrying with a justification.' : `Upload failed (${xhr.status}).`)); }; xhr.onerror = () => setUploadError(new Error('Upload failed. Check the local service and try again.')); xhr.send(body); };
-  return <Require cap="documents:write"><SectionHeader title="Documents" description="Import, check, and confirm historical records."/><WorkflowSteps steps={["Upload","Review pages","Confirm history"]} current={0}/><Panel title="Upload a file" icon="upload"><div className="inline-note">Check the patient above. OCR text stays a draft until you confirm it. PDF, JPEG or PNG · up to 25 MB.</div><div className="upload-row"><label className="dropzone"><Icon name="upload" size={24}/><strong>{file ? file.name : "Choose a file"}</strong><span>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected` : "PDF, JPEG or PNG · up to 25 MB"}</span><input aria-label="Select historical document" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setFile(e.target.files?.[0] || null)}/></label><button className="button primary" disabled={!file || progress > 0} onClick={upload}>Upload file <Icon name="arrow" size={16}/></button></div>{progress > 0 && <div style={{marginTop:10}}><div className="progress"><span style={{width:`${progress}%`}}/></div><small>{progress}% uploaded</small></div>}<Message error={uploadError || action.error}/></Panel><Panel title="Your files" icon="document" action={<button className="button small-button" onClick={() => void reload()}>Refresh jobs</button>}><State loading={loading} error={error} empty={!data?.items.length}>{data?.items.map(d => <div key={d.id} className="list-item row between"><div><strong>{d.filename}</strong><p>Uploaded <TimeText date={d.uploadedAt}/> · {d.pageCount} page(s) · {d.uploader || 'Unknown uploader'}</p><div className="row"><Badge>{d.reviewState}</Badge><Badge>{d.jobState}</Badge>{d.progress != null && <small>{d.progress}% processed</small>}</div></div><div className="row"><button className="button small-button" onClick={() => void action.run(() => protectedDownload(`${base}/${encodeURIComponent(d.id)}/original`, d.filename))}>Original</button><Link className="button small-button" href={`${base}/${encodeURIComponent(d.id)}/review`}>Review pages</Link>{d.jobState === 'failed' && <button className="button small-button" disabled={action.pending} onClick={() => void action.run(() => post(`${base}/${d.id}/retry`, {})).then(() => void reload())}>Retry OCR</button>}{['queued','running'].includes(d.jobState) && <button className="button small-button" disabled={action.pending} onClick={() => void action.run(() => post(`${base}/${d.id}/cancel`, {})).then(() => void reload())}>Cancel</button>}{d.allowedActions?.includes('withdraw') && <ConfirmAction label="Withdraw" consequence="The original remains in audit history; dependent current output may become stale." requireReason busy={action.pending} onConfirm={reason => void action.run(() => post(`${base}/${d.id}/withdraw`, { reason, expectedVersion: d.version })).then(() => void reload())}/>}</div></div>)}</State></Panel></Require>;
+
+export default function DocumentsPage() {
+  const id = useParams<{patientId: string}>().patientId;
+  const base = `${patientPath(id)}/documents`;
+  const {has} = useAuth();
+  const {data, loading, error, reload, setData} = useResource<{items: Document[]}>(base);
+  const action = useAction();
+  const hasPending = data?.items.some(d => ['queued', 'running'].includes(d.jobState)) || false;
+  useEffect(() => {
+    if (!hasPending) return;
+    let live = true;
+    const timer = window.setInterval(() => {
+      void api<{items: Document[]}>(base).then(result => {if (live) setData(result);}).catch(() => {});
+    }, 3000);
+    return () => {live = false; window.clearInterval(timer);};
+  }, [base, hasPending, setData]);
+  const process = async (documentId: string, operation: string) => {
+    const result = await action.run(() => post(`${base}/${encodeURIComponent(documentId)}/${operation}`, {}));
+    if (result) await reload();
+  };
+  const [file, setFile] = useState<File | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<Error | null>(null);
+  const [notice, setNotice] = useState('');
+  const input = useRef<HTMLInputElement>(null);
+  const activeUpload = useRef<XMLHttpRequest | null>(null);
+  useEffect(() => () => {
+    const xhr = activeUpload.current;
+    if (xhr) { xhr.onload = xhr.onerror = xhr.onabort = xhr.ontimeout = xhr.onloadend = null; xhr.abort(); }
+    activeUpload.current = null;
+  }, [id]);
+  const upload = () => {
+    if (!file || activeUpload.current) return;
+    if (!file.size || file.size > 25 * 1024 * 1024 || !/\.(pdf|jpe?g|png)$/i.test(file.name)) {
+      setUploadError(new Error('Choose a non-empty PDF, JPEG or PNG up to 25 MB.')); return;
+    }
+    setUploadError(null); setNotice(''); setProgress(0); setUploading(true);
+    const xhr = new XMLHttpRequest(); activeUpload.current = xhr;
+    const body = new FormData(); body.append('file', file);
+    xhr.open('POST', `${API_BASE}${base}`); xhr.withCredentials = true; xhr.timeout = 120000;
+    xhr.upload.onprogress = e => { if (e.lengthComputable) setProgress(Math.round(e.loaded * 100 / e.total)); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        setFile(null); if (input.current) input.current.value = '';
+        setNotice('Document stored securely. Select Start extraction to read its text.'); void reload();
+      } else {
+        let details: {message?: string; code?: string; requestId?: string} = {};
+        try { details = JSON.parse(xhr.responseText); } catch { /* Proxy may return a non-JSON error. */ }
+        setUploadError(new ApiError(xhr.status, details.code || 'UPLOAD_FAILED', details.message || `Upload failed (${xhr.status}). Please try again.`, undefined, details.requestId));
+        if (xhr.status === 401) window.dispatchEvent(new Event('sanctum:expired'));
+      }
+    };
+    xhr.onerror = () => setUploadError(new Error('Upload could not be confirmed. Check your connection, then refresh the file list before retrying.'));
+    xhr.ontimeout = () => setUploadError(new Error('Upload timed out. Refresh the file list before retrying; it may already have been stored.'));
+    xhr.onabort = () => setUploadError(new Error('Upload cancelled. Refresh the file list before retrying.'));
+    xhr.onloadend = () => { activeUpload.current = null; setUploading(false); setProgress(0); };
+    xhr.send(body);
+  };
+  return <Require cap="clinical:read"><SectionHeader title="Documents" description="Store original records securely against this patient."/>
+    <WorkflowSteps steps={['Upload', 'Review pages', 'Confirm history']} current={0}/>
+    {has('documents:write') && <Panel title="Upload a file" icon="upload">
+      <div className="inline-note">PDF, JPEG or PNG · up to 25 MB. PDFs: up to 500 pages. Images: up to 20 megapixels. Start extraction after uploading. Extracted text remains an unreviewed draft.</div>
+      <div className="upload-row"><label className="dropzone"><Icon name="upload" size={24}/><strong>{file ? file.name : 'Choose a file'}</strong><span>{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB selected` : 'PDF, JPEG or PNG'}</span>
+        <input ref={input} disabled={uploading} aria-label="Select historical document" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => {setFile(e.target.files?.[0] || null); setUploadError(null); setNotice('');}}/>
+      </label><button className="button primary" disabled={!file || uploading} onClick={upload}>{uploading ? 'Uploading…' : 'Upload file'} <Icon name="arrow" size={16}/></button></div>
+      {uploading && <div role="status" style={{marginTop: 10}}><div className="progress"><span style={{width: `${progress}%`}}/></div><small>{progress < 100 ? `${progress}% sent` : 'File sent. Validating and saving…'}</small></div>}
+      <Message error={uploadError} success={notice}/>
+    </Panel>}
+    <Message error={action.error}/>
+    <Panel title="Your files" icon="document" action={<button className="button small-button" onClick={() => void reload()}>Refresh files</button>}>
+      <State loading={loading} error={error} empty={!data?.items.length}>{data?.items.map(d => <div key={d.id} className="list-item row between"><div>
+        <strong>{d.filename}</strong><p>Uploaded <TimeText date={d.uploadedAt}/> · {d.pageCount} page(s) · {d.uploader || 'Unknown uploader'}</p>
+        <div className="row"><Badge>{d.reviewState}</Badge><Badge>{d.jobState === 'not_started' ? 'Ready for extraction' : d.jobState}</Badge>{d.jobState === 'running' && <span>{d.progress || 0}% processed</span>}</div>{d.processingMessage && <p role="status">{d.processingMessage}</p>}
+      </div><div className="row"><button className="button small-button" disabled={action.pending} onClick={() => void action.run(() => protectedDownload(`${base}/${encodeURIComponent(d.id)}/original`, d.filename))}>Download original</button>
+        {has('documents:write') && d.jobState === 'not_started' && <button className="button small-button" disabled={action.pending} onClick={() => void process(d.id, 'process')}>Start extraction</button>}
+        {has('documents:write') && ['failed', 'cancelled'].includes(d.jobState) && <button className="button small-button" disabled={action.pending} onClick={() => void process(d.id, 'retry')}>Retry extraction</button>}
+        {has('documents:write') && ['queued', 'running'].includes(d.jobState) && <button className="button small-button" disabled={action.pending} onClick={() => void process(d.id, 'cancel')}>Cancel extraction</button>}
+        {d.allowedActions?.includes('extraction') && <Link className="button small-button" href={`${base.replace('/api/v1', '')}/${encodeURIComponent(d.id)}/extraction`}>View extracted text</Link>}
+        {d.allowedActions?.includes('review') && <Link className="button small-button" href={`${base}/${encodeURIComponent(d.id)}/review`}>Review pages</Link>}
+      </div></div>)}</State>
+    </Panel>
+  </Require>;
 }

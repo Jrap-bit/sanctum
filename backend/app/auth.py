@@ -1,16 +1,17 @@
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 import secrets
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import delete, select, update
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from .account_service import account_audit, redeem_credential_link
+from .rate_limits import consume_limits
 from .config import get_settings
 from .database import get_db
-from .models import AuditEvent, LoginBucket, LoginSession, User, now
+from .models import AuditEvent, LoginSession, User, now
 from .security import COOKIE_NAME, dummy_hash, passwords, token_digest
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
@@ -47,27 +48,8 @@ def audit(db, request, action, outcome, user_id=None):
 
 
 def limit_login(db: Session, username: str, address: str) -> bool:
-    """Database-backed fixed windows shared across workers and server restarts."""
-    current = now()
-    window = int(current.timestamp()) // 900
-    expires = datetime.fromtimestamp((window + 1) * 900, timezone.utc)
-    db.execute(delete(LoginBucket).where(LoginBucket.expires_at <= current))
-    permitted = True
-    # Atomic increments prevent simultaneous requests from bypassing the limit.
-    for scope, value, limit in [("account", username, 10), ("address", address, 100)]:
-        key = token_digest(f"{scope}:{value}:{window}")
-        try:
-            with db.begin_nested():
-                db.add(LoginBucket(key=key, attempts=0, expires_at=expires))
-                db.flush()
-        except IntegrityError:
-            pass  # Another request already created this window's bucket.
-        count = db.execute(update(LoginBucket).where(LoginBucket.key == key)
-                           .values(attempts=LoginBucket.attempts + 1)
-                           .returning(LoginBucket.attempts)).scalar_one()
-        permitted = permitted and count <= limit
-    db.commit()
-    return permitted
+    return consume_limits(db, [("account", username, 10), ("address", address, 100)])
+
 
 
 def get_current_user(request: Request, db: Db) -> User:
@@ -76,7 +58,8 @@ def get_current_user(request: Request, db: Db) -> User:
     if token and len(token) <= 128:
         row = db.execute(select(User).join(LoginSession, LoginSession.user_id == User.id)
                          .where(LoginSession.token_hash == token_digest(token),
-                                LoginSession.expires_at > now(), User.active.is_(True))).scalar_one_or_none()
+                                LoginSession.expires_at > now(), User.active.is_(True),
+                                User.credentials_ready.is_(True), User.password_reset_required.is_(False))).scalar_one_or_none()
     if row is None:
         raise HTTPException(401, "Sign in to continue.")
     return row
@@ -95,7 +78,7 @@ def login(data: LoginInput, request: Request, response: Response, db: Db):
     # Lock the user so a concurrent account disable cannot race a new session.
     user = db.scalar(select(User).where(User.username == data.username).with_for_update())
     valid = passwords.verify(data.password, user.password_hash if user else dummy_hash)
-    if not valid or user is None or not user.active:
+    if not valid or user is None or not user.active or not user.credentials_ready or user.password_reset_required:
         audit(db, request, "auth.login", "denied")
         db.commit()
         raise HTTPException(401, "Invalid username or password.")
@@ -131,3 +114,21 @@ def logout(request: Request, response: Response, db: Db):
     response.delete_cookie(COOKIE_NAME, path="/", httponly=True,
                            secure=get_settings().cookie_secure, samesite="lax")
     return {"success": True}
+
+
+class ActivateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=12, max_length=128)
+
+
+@router.post("/activate")
+def activate(data: ActivateInput, request: Request, db: Db):
+    address = request.client.host if request.client else "unknown"
+    if not consume_limits(db, [("credential-address", address, 30)]):
+        account_audit(db, request, "credential.redeem", "rate_limited")
+        db.commit()
+        raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
+    # Activation and password-reset links use the existing password-setting screen.
+    # Completion deliberately does not create a login session.
+    return redeem_credential_link(db, request, data.token, data.password)

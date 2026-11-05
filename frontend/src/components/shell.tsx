@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import type { Capability } from '@/lib/types';
 import { Icon, type IconName } from './icon';
@@ -21,7 +21,28 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const { user, loading, has, logout } = useAuth();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
   const menuButton = useRef<HTMLButtonElement>(null);
+  const accountMenu = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    // Close only when interaction moves outside. Closing <details> during blur
+    // can interrupt the browser's focus handling when its plain text is clicked.
+    const closeAccountOutside = (event: Event) => {
+      const menu = accountMenu.current;
+      if (menu?.open && event.target instanceof Node && !menu.contains(event.target)) {
+        menu.open = false;
+      }
+    };
+    document.addEventListener('pointerdown', closeAccountOutside);
+    document.addEventListener('focusin', closeAccountOutside);
+    return () => {
+      document.removeEventListener('pointerdown', closeAccountOutside);
+      document.removeEventListener('focusin', closeAccountOutside);
+    };
+  }, []);
 
   if (loading) return <div className="center-screen"><span className="spinner"/>Opening workspace…</div>;
   if (!user) return <div className="center-screen">Sign in to continue.</div>;
@@ -30,7 +51,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     || (link.href === '/access/grants' && has('grants:approve'))
     || (link.href === '/patients' && has('clinical:read')));
   const signOut = async () => {
-    if (window.confirm('Sign out? Save any open work before leaving.')) await logout();
+    if (signingOut) return;
+    setSigningOut(true); setLogoutError('');
+    try { await logout(); }
+    catch { setLogoutError('Sign-out could not be confirmed. Check your connection and try again.'); setSigningOut(false); }
   };
   const closeMenu = () => {
     setMenuOpen(false);
@@ -58,24 +82,36 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </Link>;
         })}
       </nav>
-      <details className="workspace-account" onKeyDown={event => {
+      <details ref={accountMenu} className="workspace-account" onKeyDown={event => {
         if (event.key === 'Escape') {
           event.currentTarget.open = false;
           event.currentTarget.querySelector('summary')?.focus();
           event.stopPropagation();
         }
-      }} onBlur={event => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.open = false;
       }}>
         <summary aria-label={`Account: ${user.displayName}`} title={user.displayName}>
           <span className="account-avatar">{user.displayName?.charAt(0) || 'U'}</span><Icon name="chevron" size={14}/>
         </summary>
         <div className="account-popover">
           <strong>{user.displayName}</strong><span>{user.username}</span>
-          <button type="button" onClick={signOut}><Icon name="logout" size={18}/>Sign out</button>
+          <button type="button" onClick={() => { setLogoutError(''); setConfirmLogout(true); }}><Icon name="logout" size={18}/>Sign out</button>
         </div>
       </details>
     </header>
+    {confirmLogout && <div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="logout-title" onKeyDown={event => {
+      if (event.key === 'Escape' && !signingOut) setConfirmLogout(false);
+      if (event.key === 'Tab') {
+        const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+        const first = buttons[0], last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    }}>
+      <h2 id="logout-title">Sign out?</h2><p>Save any open work before leaving.</p>
+      {logoutError && <p className="notice danger" role="alert">{logoutError}</p>}
+      <div className="actions"><button autoFocus className="button ghost" disabled={signingOut} onClick={() => setConfirmLogout(false)}>Cancel</button>
+      <button className="button danger" disabled={signingOut} onClick={() => void signOut()}>{signingOut ? 'Signing out…' : 'Confirm sign out'}</button></div>
+    </div></div>}
     <main id="workspace-content" className="main-content" tabIndex={-1}>{children}</main>
   </div>;
 }

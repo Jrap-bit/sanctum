@@ -2,7 +2,7 @@
 from datetime import date, datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, JSON, LargeBinary, String
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, JSON, LargeBinary, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -19,6 +19,8 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(160))
     password_hash: Mapped[str] = mapped_column(String(255))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    credentials_ready: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    password_reset_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
@@ -29,6 +31,19 @@ class LoginSession(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class CredentialToken(Base):
+    """Only the hash is stored; each account has at most one current credential link."""
+    __tablename__ = "credential_tokens"
+    __table_args__ = (CheckConstraint("purpose IN ('activation', 'reset')", name="credential_token_purpose"),)
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), unique=True)
+    issued_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    purpose: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class LoginBucket(Base):
@@ -112,3 +127,41 @@ class ClinicalNote(Base):
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Version is explicitly incremented so an amendment starts after its parent's version.
     __mapper_args__ = {"version_id_col": version, "version_id_generator": False}
+
+
+class StoredDocument(Base):
+    __tablename__ = "stored_documents"
+    __table_args__ = (UniqueConstraint("patient_id", "digest", name="document_patient_digest"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey("patients.id"), index=True)
+    uploaded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    digest: Mapped[str] = mapped_column(String(64))
+    metadata_payload: Mapped[bytes] = mapped_column(LargeBinary)
+    original_payload: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    media_type: Mapped[str] = mapped_column(String(32))
+    page_count: Mapped[int] = mapped_column(Integer)
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ExtractionJob(Base):
+    __tablename__ = "extraction_jobs"
+    __table_args__ = (CheckConstraint("state IN ('queued', 'running', 'completed', 'failed', 'cancelled')", name="extraction_state"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("stored_documents.id"), unique=True)
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    state: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    completed_pages: Mapped[int] = mapped_column(Integer, default=0)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    message: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ExtractedPage(Base):
+    __tablename__ = "extracted_pages"
+    document_id: Mapped[str] = mapped_column(ForeignKey("stored_documents.id"), primary_key=True)
+    page_number: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payload: Mapped[bytes] = mapped_column(LargeBinary)

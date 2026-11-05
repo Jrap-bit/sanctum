@@ -14,6 +14,10 @@ class Settings(BaseSettings):
                                  "http://localhost:8000", "http://127.0.0.1:8000"]
     cookie_secure: bool = False  # Local HTTP only; set true when deploying behind HTTPS.
     session_hours: int = Field(default=8, ge=1, le=24)
+    activation_token_hours: int = Field(default=24, ge=1, le=72)
+    reset_token_minutes: int = Field(default=30, ge=5, le=120)
+    tesseract_command: str = "tesseract"
+    ocr_language: str = "eng"
     clinic_timezone: str = "Asia/Kolkata"
     encryption_key_path: Path = Path(__file__).resolve().parents[1] / "secrets" / "clinical.key"
 

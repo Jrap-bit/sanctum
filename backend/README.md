@@ -8,7 +8,7 @@ Origin checks on writes, and frontend-compatible errors.
 Patient profiles, patient-scoped access, encrypted profile/follow-up payloads, archive/reactivate,
 profile updates with version checks, follow-ups and a persisted overview timeline are implemented.
 Session drafts, finalization, linked amendments and earlier-version reading are implemented.
-User administration mutations in the UI, activation links, OCR/AI, reports and recovery are still pending.
+Staff account administration and one-use activation/reset links are implemented and connected to the People screen. OCR extraction is implemented; AI summaries, reports and recovery are still pending.
 Use synthetic data while developing. No public self-registration or default account exists.
 
 ## First-time setup (from this directory)
@@ -206,3 +206,18 @@ Tests cover lifecycle, empty finalization, structured semantics, old-version con
 patient/author isolation, archive restrictions, preserved amendment chains, unknown dates,
 deactivation/revocation and rollback when audit recording fails. The default SQLite
 suite tests service behavior; the PostgreSQL trigger needs its separate integration check.
+
+
+## Staff account management
+
+Administrator account APIs now support invitations, one-use activation/reset links, deactivation and reactivation. Apply `alembic upgrade head` before running this version. See [the API contract and frontend handoff](docs/account-management-api.md) for endpoints, states, setup and remaining UI work. Issuing a reset immediately revokes sessions and blocks the old password until completion. No email is sent automatically.
+
+
+## Document originals
+
+Patient-scoped encrypted PDF/JPEG/PNG upload, listing and original download are now implemented. Install the updated requirements and apply migration `0005_documents`. See [document storage and setup](docs/document-storage.md). The Documents screen is connected; page review and import remain unfinished. Local text extraction/OCR is now available through a separate worker.
+
+
+## Local OCR worker
+
+After installing requirements and applying migration `0006_extraction`, run `python -m app.worker` in a separate backend terminal. In Documents, choose **Start extraction**, then **View extracted text** when completed. Tesseract and its language data are required for scanned pages/images. Results remain unreviewed drafts. See [OCR workflow, setup and limitations](docs/ocr-processing.md).
