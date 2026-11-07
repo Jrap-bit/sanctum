@@ -15,7 +15,7 @@ def token_digest(token: str) -> str:
 
 ROLE_CAPABILITIES = {
     "clinician": ["patients:read", "patients:create", "clinical:read", "clinical:write",
-                  "documents:write", "summaries:write", "indicators:write", "reports:write"],
+                  "documents:write", "summaries:write", "indicators:write", "reports:write", "grants:request"],
     "admin": ["patients:read", "patients:create", "users:manage", "audit:read", "operations:manage"],
     "oversight": ["patients:read", "clinical:read", "grants:approve", "rules:publish"],
 }

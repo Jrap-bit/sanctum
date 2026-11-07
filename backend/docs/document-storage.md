@@ -1,6 +1,6 @@
 # Document upload and storage
 
-Implemented on 5 November 2026. This slice stores originals. Local OCR and processing jobs were subsequently added; see [OCR processing](ocr-processing.md). Extracted-page review, import and withdrawal remain unfinished.
+Implemented on 5 November 2026. This slice stores originals. Local OCR and processing jobs were subsequently added; see [OCR processing](ocr-processing.md). Extracted-page review and confirmed import are now implemented; see [document review](document-review.md). Withdrawal remains unfinished.
 
 ## Simple workflow
 

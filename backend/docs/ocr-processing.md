@@ -10,7 +10,7 @@ Implemented 5 November 2026. A clinician with access to the patient opens Docume
 - `ExtractionJob`: one current processing record per document. States are queued, running, completed, failed and cancelled.
 - `ExtractedPage`: numbered encrypted text records, including extraction method and a no-readable-text flag.
 - Migration `0006_extraction`: creates the queue and page tables.
-- Documents screen: start, retry, cancel, progress refresh and result link. A separate extraction viewer displays draft text. The existing review/import editor is not connected yet.
+- Documents screen: start, retry, cancel, progress refresh and result link. A separate extraction viewer displays draft text. The review/import editor is now connected; see [reviewed import](document-review.md).
 
 ## Start on this Mac
 
@@ -64,6 +64,6 @@ Relative to `/api/v1/patients/{patientId}/documents/{documentId}`:
 
 ## Next feature
 
-Page corrections, reviewed-page status, original-page comparison and grouping reviewed pages into historical sessions. AI summarisation follows reviewed import.
+Page corrections, reviewed-page status, original-page comparison and confirmed historical import are now implemented in [document review](document-review.md). AI summarisation follows reviewed import.
 
 Implementation references: [PDFium Python API](https://pypdfium2.readthedocs.io/en/stable/python_api.html) and [Tesseract command-line documentation](https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html).

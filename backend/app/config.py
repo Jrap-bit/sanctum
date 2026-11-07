@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     reset_token_minutes: int = Field(default=30, ge=5, le=120)
     tesseract_command: str = "tesseract"
     ocr_language: str = "eng"
+    ollama_url: str = "http://127.0.0.1:11434"
+    summary_model: str = "qwen3:8b"
     clinic_timezone: str = "Asia/Kolkata"
     encryption_key_path: Path = Path(__file__).resolve().parents[1] / "secrets" / "clinical.key"
 

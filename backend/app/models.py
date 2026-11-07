@@ -139,6 +139,7 @@ class StoredDocument(Base):
     metadata_payload: Mapped[bytes] = mapped_column(LargeBinary)
     original_payload: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
     media_type: Mapped[str] = mapped_column(String(32))
+    review_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     page_count: Mapped[int] = mapped_column(Integer)
     size_bytes: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -164,4 +165,123 @@ class ExtractedPage(Base):
     __tablename__ = "extracted_pages"
     document_id: Mapped[str] = mapped_column(ForeignKey("stored_documents.id"), primary_key=True)
     page_number: Mapped[int] = mapped_column(Integer, primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     payload: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class DocumentImport(Base):
+    __tablename__ = "document_imports"
+    document_id: Mapped[str] = mapped_column(ForeignKey("stored_documents.id"), primary_key=True)
+    payload: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class AISummary(Base):
+    __tablename__ = "ai_summaries"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey("patients.id"), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    kind: Mapped[str] = mapped_column(String(24))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    payload: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class SummaryJob(Base):
+    __tablename__ = "summary_jobs"
+    __table_args__ = (UniqueConstraint("requested_by", "request_key", name="summary_request_key"),
+        CheckConstraint("state IN ('queued','running','completed','failed','cancelled')",name="summary_job_state"))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey("patients.id"), index=True)
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    request_key: Mapped[str] = mapped_column(String(36))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(24))
+    payload: Mapped[bytes] = mapped_column(LargeBinary)
+    state: Mapped[str] = mapped_column(String(16), default="queued", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    message: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    summary_id: Mapped[str | None] = mapped_column(ForeignKey("ai_summaries.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class IndicatorRun(Base):
+    __tablename__ = 'indicator_runs'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey('patients.id'), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    input_digest: Mapped[str] = mapped_column(String(64))
+    payload: Mapped[bytes] = mapped_column(LargeBinary)
+    reviews: Mapped[bytes] = mapped_column(LargeBinary)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class ConfirmedRating(Base):
+    __tablename__='confirmed_ratings'
+    __table_args__=(CheckConstraint("state IN ('confirmed','withdrawn')",name='rating_state'),)
+    id: Mapped[str] = mapped_column(String(36),primary_key=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey('patients.id'),index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    payload: Mapped[bytes] = mapped_column(LargeBinary)
+    withdrawal: Mapped[bytes | None] = mapped_column(LargeBinary,nullable=True)
+    state: Mapped[str] = mapped_column(String(16),default='confirmed')
+    version: Mapped[int] = mapped_column(Integer,default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=now)
+
+class ConfirmedConcern(Base):
+    __tablename__='confirmed_concerns'
+    __table_args__=(CheckConstraint("state IN ('confirmed','withdrawn')",name='concern_state'),)
+    id: Mapped[str] = mapped_column(String(36),primary_key=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey('patients.id'),index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    payload: Mapped[bytes] = mapped_column(LargeBinary)
+    withdrawal: Mapped[bytes | None] = mapped_column(LargeBinary,nullable=True)
+    state: Mapped[str] = mapped_column(String(16),default='confirmed')
+    version: Mapped[int] = mapped_column(Integer,default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=now)
+
+class ConfirmedMedication(Base):
+    __tablename__='confirmed_medications'
+    __table_args__=(CheckConstraint("state IN ('confirmed','withdrawn')",name='medication_state'),)
+    id: Mapped[str] = mapped_column(String(36),primary_key=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey('patients.id'),index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    payload: Mapped[bytes] = mapped_column(LargeBinary)
+    withdrawal: Mapped[bytes | None] = mapped_column(LargeBinary,nullable=True)
+    state: Mapped[str] = mapped_column(String(16),default='confirmed')
+    version: Mapped[int] = mapped_column(Integer,default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=now)
+
+
+class RuleHead(Base):
+    __tablename__='rule_heads'
+    id: Mapped[str] = mapped_column(String(40),primary_key=True)
+    current_version: Mapped[int] = mapped_column(Integer)
+
+class RuleRevision(Base):
+    __tablename__='rule_revisions'
+    rule_id: Mapped[str] = mapped_column(ForeignKey('rule_heads.id'),primary_key=True)
+    version: Mapped[int] = mapped_column(Integer,primary_key=True)
+    parameters: Mapped[dict] = mapped_column(JSON)
+    enabled: Mapped[bool] = mapped_column(Boolean)
+    reason: Mapped[str] = mapped_column(String(1000))
+    actor_id: Mapped[str | None] = mapped_column(ForeignKey('users.id'),nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=now)
+
+
+class ClinicalGrant(Base):
+    __tablename__='clinical_grants'
+    __table_args__=(CheckConstraint("state IN ('pending','approved','denied','revoked','cancelled')",name='clinical_grant_state'),CheckConstraint("capability IN ('clinical:read','clinical:write')",name='clinical_grant_capability'))
+    id: Mapped[str] = mapped_column(String(36),primary_key=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey('patients.id'),index=True)
+    subject_id: Mapped[str] = mapped_column(ForeignKey('users.id'),index=True)
+    requester_id: Mapped[str] = mapped_column(ForeignKey('users.id'))
+    approver_id: Mapped[str | None] = mapped_column(ForeignKey('users.id'),nullable=True)
+    capability: Mapped[str] = mapped_column(String(32))
+    state: Mapped[str] = mapped_column(String(16))
+    version: Mapped[int] = mapped_column(Integer,default=1)
+    payload: Mapped[bytes] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=now)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True),nullable=True)

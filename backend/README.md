@@ -215,9 +215,49 @@ Administrator account APIs now support invitations, one-use activation/reset lin
 
 ## Document originals
 
-Patient-scoped encrypted PDF/JPEG/PNG upload, listing and original download are now implemented. Install the updated requirements and apply migration `0005_documents`. See [document storage and setup](docs/document-storage.md). The Documents screen is connected; page review and import remain unfinished. Local text extraction/OCR is now available through a separate worker.
+Patient-scoped encrypted PDF/JPEG/PNG upload, listing and original download are now implemented. Install the updated requirements and apply migration `0005_documents`. See [document storage and setup](docs/document-storage.md). The Documents screen is connected; page review and confirmed historical import are now implemented. Local text extraction/OCR is now available through a separate worker.
 
 
 ## Local OCR worker
 
 After installing requirements and applying migration `0006_extraction`, run `python -m app.worker` in a separate backend terminal. In Documents, choose **Start extraction**, then **View extracted text** when completed. Tesseract and its language data are required for scanned pages/images. Results remain unreviewed drafts. See [OCR workflow, setup and limitations](docs/ocr-processing.md).
+
+
+## Review and import historical documents
+
+Apply migration `0007_document_review`, then open **Review pages** after extraction. Correct and review each page, exclude unwanted/unreadable pages, group included pages, and confirm the import. Historical notes retain their source pages and are finalized; repeated confirmation does not duplicate them. See [review workflow and code explanation](docs/document-review.md).
+
+
+## Local AI summary drafts
+
+Apply migration `0008_ai_summaries`, keep Ollama running with the configured local model, and start `python -m app.summary_worker` in another backend terminal. Select finalized records in **New AI summary**, generate a referenced draft, then review the prose and suggested facts separately. See [setup, workflow, code explanation and limits](docs/ai-summaries.md).
+
+
+## Follow-up indicators
+
+Apply migration `0009_indicators` and restart FastAPI. The patient Indicators tab now evaluates the documented follow-up outstanding rule (DT-03), retains encrypted source/result snapshots, and supports acknowledgement/dismissal and historical views. No AI worker is needed for this deterministic check. The other four indicator rules remain pending. See [indicator workflow, setup and code explanation](docs/indicators.md).
+
+
+## Confirmed ratings and rating-increase indicator
+
+Apply migration `0010_ratings`, restart FastAPI, and open a patient’s Indicators tab. Confirm ratings against finalized notes, then choose Evaluate now. DT-02 compares the latest eligible pair on the same named 0–10 scale using the default increase threshold of 2. Incorrect ratings can be withdrawn and replaced without overwriting their history. See [rating workflow and comparison limits](docs/indicators.md#confirmed-ratings-and-dt-02).
+
+
+## Repeated concerns
+
+Apply migration `0011_concerns` and restart FastAPI. The Indicators tab supports source-linked concern confirmation and DT-01 using the latest three known-date finalized sessions. Confirmed present/current/patient concerns count; missing information is not treated as absence. See [workflow and limitations](docs/indicators.md#confirmed-concerns-and-dt-01).
+
+
+## Documented medication changes
+
+Apply migration `0012_medications` and restart FastAPI. Confirm source-linked medication entries in the patient Indicators tab, then Evaluate now. DT-04 checks the documented inclusive 30-day window and preserves uncertain entries as not evaluable. See [workflow and limits](docs/indicators.md#documented-medication-changes-dt-04).
+
+
+## Required documentation indicator
+
+DT-05 now checks the default session template: date status and at least one non-empty Concern, Observation or Intervention entry. Restart FastAPI and evaluate again; no new migration is needed. Open flagged notes and use amendments to correct finalized records. See [workflow and limits](docs/indicators.md#required-documentation-dt-05).
+
+
+## Rule settings
+
+Apply migration `0013_rule_versions`, restart FastAPI, and use an oversight account to publish bounded rule settings. Each publication retains its author, reason and prior versions. Evaluations preserve their original settings and become stale when current settings change. See [setup and verification](docs/rule-settings.md).

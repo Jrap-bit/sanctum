@@ -14,6 +14,14 @@ from .patients import router as patient_router
 from .sessions import router as session_router
 from .documents import router as document_router
 from .processing import router as processing_router
+from .review import router as review_router
+from .summaries import router as summary_router
+from .indicators import router as indicator_router
+from .ratings import router as rating_router
+from .concerns import router as concern_router
+from .medications import router as medication_router
+from .rules import router as rule_router
+from .grants import router as grant_router
 
 app = FastAPI(title="Sanctum API", version="0.5.0")
 app.include_router(auth_router)
@@ -22,6 +30,14 @@ app.include_router(patient_router)
 app.include_router(session_router)
 app.include_router(document_router)
 app.include_router(processing_router)
+app.include_router(review_router)
+app.include_router(summary_router)
+app.include_router(indicator_router)
+app.include_router(rating_router)
+app.include_router(concern_router)
+app.include_router(medication_router)
+app.include_router(rule_router)
+app.include_router(grant_router)
 
 
 def error(request, status, code, message, fields=None):
