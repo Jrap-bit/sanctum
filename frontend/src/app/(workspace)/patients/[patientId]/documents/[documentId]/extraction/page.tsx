@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { Require } from '@/components/shell';
@@ -13,7 +14,7 @@ export default function ExtractionPage() {
   const action = useAction(); const [index, setIndex] = useState(0); const page = data?.pages[index];
   return <Require cap="clinical:read"><SectionHeader title="Extracted document text" description="Draft transcription for checking against the original."/>
     <Panel title={data?.filename || 'Document'} icon="document">
-      <div className="notice warning">This text has not been reviewed. OCR can misread names, dates, doses and handwriting. Correction and confirmation of historical sessions will be added next.</div>
+      <p><Link href={`${base}/review`}>Open page review and history import</Link></p><div className="notice warning">This text has not been reviewed. OCR can misread names, dates, doses and handwriting. Use Review pages to correct the transcription and confirm historical sessions.</div>
       <State loading={loading} error={error}>{page && <div className="stack">
         <div className="row between"><button className="button" disabled={index === 0} onClick={() => setIndex(index - 1)}>Previous page</button><strong>Page {page.pageNumber} of {data?.pages.length}</strong><button className="button" disabled={index >= (data?.pages.length || 0) - 1} onClick={() => setIndex(index + 1)}>Next page</button></div>
         <div className="row"><Badge>Unreviewed</Badge><Badge>{page.method === 'embedded_text' ? 'PDF text' : 'OCR'}</Badge></div>

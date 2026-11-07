@@ -1,3 +1,4 @@
+from .patients import has_access
 """Durable extraction requests and protected access to draft page text."""
 from datetime import datetime
 from uuid import UUID, uuid4
@@ -5,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import delete, select
 from .auth import CurrentUser, Db
 from .crypto import decrypt
-from .models import ExtractionJob, ExtractedPage, StoredDocument, now
+from .models import ExtractionJob, ExtractedPage, StoredDocument, DocumentImport, now
 from .patients import require, scoped_patient, record_audit
 
 router = APIRouter(tags=['Document processing'])
@@ -79,14 +80,15 @@ def pages(patient_id: UUID, document_id: UUID, user: CurrentUser, db: Db, reques
     if job is None or job.state != 'completed':
         raise HTTPException(409, 'Text extraction has not completed. Check the document processing status.')
     rows = db.scalars(select(ExtractedPage).where(ExtractedPage.document_id == doc.id).order_by(ExtractedPage.page_number)).all()
-    items = []
-    for row in rows:
-        data = decrypt(row.payload, f'document-page:{doc.patient_id}:{doc.id}:{row.page_number}')
-        items.append({'pageNumber': row.page_number, **data, 'correctedText': data['rawText'], 'reviewState': 'unreviewed', 'version': 1, 'included': True})
+    from .review import page_output
+    items = [page_output(doc, row) for row in rows]
+    imported = db.get(DocumentImport, doc.id)
+    imported_result = decrypt(imported.payload, f'document-import:{doc.patient_id}:{doc.id}')['result'] if imported else None
     filename = decrypt(doc.metadata_payload, f'document-meta:{doc.patient_id}:{doc.id}')['filename']
     record_audit(db, request, user, 'document.pages_read', doc.id)
     db.commit()
-    return {'filename': filename, 'version': 1, 'pages': items}
+    return {'filename': filename, 'version': doc.review_version, 'pages': items, 'imported': imported_result,
+            'allowedActions': ['review'] if not imported and has_access(db,user,doc.patient_id,write=True) and 'documents:write' in user.capabilities else []}
 
 
 @router.get('/api/v1/admin/operations/jobs')
@@ -94,6 +96,12 @@ def jobs(user: CurrentUser, db: Db, request: Request):
     require(user, 'operations:manage')
     rows = db.execute(select(ExtractionJob, StoredDocument.page_count).join(StoredDocument, StoredDocument.id == ExtractionJob.document_id)
                       .order_by(ExtractionJob.created_at.desc()).limit(100)).all()
-    result = {'items': [job_output(j, count) for j, count in rows]}
+    from .models import SummaryJob
+    from .summaries import job_output as summary_job_output
+    summary_jobs = db.scalars(select(SummaryJob).order_by(SummaryJob.created_at.desc()).limit(100)).all()
+    entries = [(j.created_at, {**job_output(j, count), 'kind': 'extraction'}) for j, count in rows]
+    entries += [(j.created_at, summary_job_output(j)) for j in summary_jobs]
+    entries.sort(key=lambda item: item[0], reverse=True)
+    result = {'items': [item[1] for item in entries[:100]]}
     record_audit(db, request, user, 'processing.jobs_read', None); db.commit()
     return result

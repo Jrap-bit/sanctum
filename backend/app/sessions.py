@@ -1,3 +1,4 @@
+from .patients import has_access
 """Session workflow: draft → finalized → a separate amendment draft."""
 from datetime import date, datetime
 from typing import Literal
@@ -67,6 +68,8 @@ class SessionOutput(BaseModel):
     medicationReported: list[NoteField]
     author: str
     updatedAt: datetime
+    source: dict | None = None
+    dateStatus: Literal["known", "approximate", "unknown"] = "unknown"
     amendmentReason: str | None = None
     versions: list["SessionOutput"] = Field(default_factory=list)
     allowedActions: list[str]
@@ -85,8 +88,9 @@ def scoped_note(db, patient, note_id):
 
 def output(db, user, patient, note, *, history=True):
     content = content_of(note)
+    content.setdefault("dateStatus", "known" if note.event_date else "unknown")
     actions = []
-    if patient.status == "active" and "clinical:write" in user.capabilities:
+    if patient.status == "active" and has_access(db,user,patient.id,write=True) and "clinical:write" in user.capabilities:
         if note.state == "draft" and note.author_id == user.id:
             actions = ["edit", "finalize"]
         elif note.state == "finalized":
@@ -160,7 +164,10 @@ def save_draft(patient_id: UUID, session_id: UUID, data: SaveDraft, user: Curren
     check_draft_author(note, user)
     content = data.model_dump(mode="json", exclude={"expectedVersion", "eventDate"})
     # Amendment reasons are established once, not silently editable through draft saves.
-    content["amendmentReason"] = content_of(note)["amendmentReason"]
+    old_content = content_of(note)
+    content["amendmentReason"] = old_content["amendmentReason"]
+    if old_content.get("source"): content["source"] = old_content["source"]
+    content["dateStatus"] = old_content.get("dateStatus", "known" if note.event_date else "unknown") if data.eventDate == note.event_date else ("known" if data.eventDate else "unknown")
     note.payload = encrypt(content, f"session:{patient.id}:{note.id}")
     note.event_date = data.eventDate
     note.version += 1

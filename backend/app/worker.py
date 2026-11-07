@@ -1,3 +1,4 @@
+from .patients import has_access
 """Run with python -m app.worker; PostgreSQL owns the durable job queue."""
 import argparse
 from datetime import timedelta
@@ -33,7 +34,7 @@ def permitted(db, doc, job):
     return bool(user and user.active and user.credentials_ready and not user.password_reset_required
                 and {'documents:write', 'clinical:read'} <= set(user.capabilities)
                 and patient and patient.status == 'active'
-                and db.get(PatientAccess, (patient.id, user.id)))
+                and has_access(db,user,patient.id,write=True))
 
 
 def audit(db, job, action, outcome='success'):

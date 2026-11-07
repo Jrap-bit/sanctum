@@ -1,3 +1,4 @@
+from .patients import has_access
 """Patient-scoped encrypted originals; OCR/review is a separate next stage."""
 from datetime import datetime
 from hashlib import sha256
@@ -20,7 +21,7 @@ from starlette.formparsers import MultiPartParser, MultiPartException
 from .auth import CurrentUser, Db, get_current_user
 from .crypto import encrypt, decrypt, cipher
 from cryptography.fernet import InvalidToken
-from .models import StoredDocument, User, PatientEvent, ExtractionJob
+from .models import StoredDocument, User, PatientEvent, ExtractionJob, DocumentImport
 from .patients import require, scoped_patient, record_audit
 
 router = APIRouter(prefix='/api/v1/patients/{patient_id}/documents', tags=['Documents'])
@@ -53,12 +54,13 @@ def output(db, row):
     meta = decrypt(row.metadata_payload, f'document-meta:{row.patient_id}:{row.id}')
     job = db.scalar(select(ExtractionJob).where(ExtractionJob.document_id == row.id))
     state = job.state if job else 'not_started'
-    actions = ['download'] + (['extraction'] if state == 'completed' else [])
+    actions = ['download'] + (['extraction', 'review'] if state == 'completed' else [])
     return DocumentOutput(id=row.id, filename=meta['filename'], uploadedAt=row.created_at,
                           uploader=db.get(User, row.uploaded_by).display_name,
                           pageCount=row.page_count, sizeBytes=row.size_bytes, mediaType=row.media_type, jobState=state,
                           progress=int(job.completed_pages * 100 / row.page_count) if job else 0,
-                          processingMessage=job.message if job else None, allowedActions=actions)
+                          processingMessage=job.message if job else None, allowedActions=actions,
+                          version=row.review_version, reviewState='imported' if db.get(DocumentImport, row.id) else 'in_review' if row.review_version > 1 else 'unreviewed')
 
 
 def validate_file(raw, filename, declared_type):

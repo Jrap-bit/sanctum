@@ -6,12 +6,12 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from .auth import CurrentUser, Db
 from .config import get_settings
 from .crypto import decrypt, encrypt
-from .models import AuditEvent, ClinicalNote, FollowUp, Patient, PatientAccess, PatientEvent, User
+from .models import AuditEvent, AISummary, ClinicalNote, FollowUp, Patient, PatientAccess, ClinicalGrant, PatientEvent, User
 
 router = APIRouter(prefix="/api/v1", tags=["Patients"])
 
@@ -106,8 +106,14 @@ def require(user, capability):
         raise HTTPException(403, "This action is outside your permissions.")
 
 
-def has_access(db, user, patient_id):
-    return db.get(PatientAccess, (patient_id, user.id)) is not None
+def access_ids(user,write=False):
+    grants=select(ClinicalGrant.patient_id).where(ClinicalGrant.subject_id==user.id,ClinicalGrant.state=='approved')
+    if write:grants=grants.where(ClinicalGrant.capability=='clinical:write')
+    return select(PatientAccess.patient_id).where(PatientAccess.user_id==user.id).union(grants)
+
+
+def has_access(db,user,patient_id,write=False):
+    return db.scalar(select(Patient.id).where(Patient.id==str(patient_id),Patient.id.in_(access_ids(user,write)))) is not None
 
 
 def scoped_patient(db, user, patient_id, *, clinical=False, write=False, lock=False):
@@ -115,11 +121,17 @@ def scoped_patient(db, user, patient_id, *, clinical=False, write=False, lock=Fa
     statement = select(Patient).where(Patient.id == str(patient_id))
     # Profile administrators get identity access only, never implicit clinical access.
     if clinical or write or "users:manage" not in user.capabilities:
-        statement = statement.where(Patient.id.in_(select(PatientAccess.patient_id).where(PatientAccess.user_id == user.id)))
+        statement = statement.where(Patient.id.in_(access_ids(user)))
+    if (write or lock) and (clinical or write or 'users:manage' not in user.capabilities):
+        statement=statement.where(Patient.id.in_(access_ids(user,write=True)))
     if lock:
         statement = statement.with_for_update()
     patient = db.scalar(statement)
     if patient is None:
+        raise HTTPException(404, "Patient unavailable.")
+    # Recheck after acquiring the patient lock: a grant may have been revoked
+    # while this transaction waited for another writer.
+    if lock and (clinical or write or "users:manage" not in user.capabilities) and not has_access(db,user,patient.id,write=True):
         raise HTTPException(404, "Patient unavailable.")
     return patient
 
@@ -140,7 +152,7 @@ def serialize(db, user, patient):
     actions = []
     if scoped and "clinical:read" in user.capabilities:
         actions.append("clinical:read")
-    if (scoped and "clinical:write" in user.capabilities) or "users:manage" in user.capabilities:
+    if (scoped and has_access(db,user,patient.id,write=True) and "clinical:write" in user.capabilities) or "users:manage" in user.capabilities:
         actions.extend(["archive", "edit"])
     practitioner = db.get(User, patient.primary_practitioner_id)
     return PatientOutput(id=patient.id, displayName=profile["displayName"], dateOfBirth=profile["dateOfBirth"],
@@ -154,7 +166,7 @@ def list_patients(user: CurrentUser, db: Db, request: Request,
     require(user, "patients:read")
     statement = select(Patient).where(Patient.status == status).order_by(Patient.created_at.desc(), Patient.id)
     if "users:manage" not in user.capabilities:
-        statement = statement.where(Patient.id.in_(select(PatientAccess.patient_id).where(PatientAccess.user_id == user.id)))
+        statement = statement.where(Patient.id.in_(access_ids(user)))
     items = [serialize(db, user, patient) for patient in db.scalars(statement)]
     search = q.strip().casefold()
     if search:
@@ -257,11 +269,21 @@ def timeline(patient_id: UUID, user: CurrentUser, db: Db, request: Request):
     notes = db.execute(select(ClinicalNote, User.display_name).join(User, User.id == ClinicalNote.author_id)
                        .where(ClinicalNote.patient_id == patient.id).order_by(ClinicalNote.created_at.desc())).all()
     for note, author in notes:
+        note_content = decrypt(note.payload, f"session:{patient.id}:{note.id}")
         items.append({"id": note.id, "type": "amendment" if note.parent_id else "session",
-                      "title": "Session amendment" if note.parent_id else "Session note",
+                      "title": "Session amendment" if note.parent_id else "Imported historical session" if note_content.get("source") else "Session note",
+                      "dateStatus": note_content.get("dateStatus", "known" if note.event_date else "unknown"),
                       "eventDate": note.event_date, "createdAt": note.created_at,
                       "author": author, "version": note.version, "status": note.state,
                       "href": f"/patients/{patient.id}/sessions/{note.id}"})
+    from .summaries import sources_current
+    for summary in db.scalars(select(AISummary).where(AISummary.patient_id == patient.id)):
+        payload = decrypt(summary.payload, f"summary:{patient.id}:{summary.id}")
+        items.append({"id": summary.id, "type": "summary", "title": "AI summary", "eventDate": None,
+                      "createdAt": summary.created_at, "author": db.get(User, summary.created_by).display_name,
+                      "version": summary.version, "status": payload["reviewState"],
+                      "freshness": "current" if sources_current(db, patient.id, payload["sources"]) else "stale",
+                      "href": f"/patients/{patient.id}/summaries/{summary.id}"})
     record_audit(db, request, user, "timeline.read", patient.id)
     db.commit()
     return {"items": items}
