@@ -7,7 +7,8 @@
     "dev:demo": "NEXT_PUBLIC_DEMO_MODE=1 next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/check-api.cjs"
   },
   "dependencies": {
     "next": "^16.4.3",

@@ -6,13 +6,24 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   headers.set('Accept', 'application/json');
-  const response = await fetch(API_BASE + path, { ...init, headers, credentials: 'same-origin', cache: 'no-store' });
+  let response: Response;
+  try {
+    response = await fetch(API_BASE + path, { ...init, headers, signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000), credentials: 'same-origin', cache: 'no-store' });
+  } catch (error) {
+    if (init.signal?.aborted) throw error;
+    throw new ApiError(0, 'CONNECTION_FAILED', 'The server could not be reached. Check your connection and try again.');
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     if (response.status === 401 && typeof window !== 'undefined' && !path.startsWith('/auth/')) {
       window.dispatchEvent(new Event('sanctum:expired'));
     }
-    if (response.status === 403 && typeof window !== 'undefined') window.dispatchEvent(new Event('sanctum:denied'));
+    if ([403, 404].includes(response.status) && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sanctum:denied', {detail: {path, status: response.status}}));
+    }
+    if (response.status === 404 && body.message === 'Not Found') {
+      throw new ApiError(404, 'FEATURE_UNAVAILABLE', 'This feature is not available on the connected server yet.', undefined, body.requestId);
+    }
     throw new ApiError(response.status, body.code || 'REQUEST_FAILED', body.message || `Request failed (${response.status})`, body.fieldErrors, body.requestId);
   }
   if (response.status === 204) return {} as T;
@@ -25,7 +36,7 @@ export async function protectedDownload(path: string, filename: string) {
   const response = await fetch(API_BASE + path, { credentials: 'same-origin', cache: 'no-store' });
   if (!response.ok) {
     if (response.status === 401) window.dispatchEvent(new Event('sanctum:expired'));
-    if (response.status === 403) window.dispatchEvent(new Event('sanctum:denied'));
+    if ([403, 404].includes(response.status)) window.dispatchEvent(new CustomEvent('sanctum:denied', {detail: {path, status: response.status}}));
     throw new ApiError(response.status, 'DOWNLOAD_FAILED', response.status === 403 ? 'Access denied' : 'Download could not be completed');
   }
   const url = URL.createObjectURL(await response.blob());

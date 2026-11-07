@@ -2,6 +2,8 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { useUnsavedChanges } from '@/lib/use-unsaved-changes';
+import { Modal } from '@/components/modal';
 import { Require } from '@/components/shell';
 import { Badge, Field, Message, Panel, State, WorkflowSteps, SectionHeader } from '@/components/ui';
 import { API_BASE, api, ApiError, patch, patientPath, post, protectedDownload } from '@/lib/api';
@@ -14,18 +16,18 @@ type Review = {pages:DocumentPage[];filename:string;version:number;imported:Impo
 export default function ReviewDocument() {
   const {patientId,documentId}=useParams<{patientId:string;documentId:string}>();
   const base=`${patientPath(patientId)}/documents/${encodeURIComponent(documentId)}`;
-  const {data,loading,error,setData}=useResource<Review>(`${base}/pages`);
+  const {data,loading,error,setData,reload}=useResource<Review>(`${base}/pages`);
   const {has}=useAuth();const action=useAction();
   const [index,setIndex]=useState(0);const [text,setText]=useState('');
   const [included,setIncluded]=useState(true);const [unreadable,setUnreadable]=useState(false);
   const [groups,setGroups]=useState<Group[]>([{pageNumbers:[],dateStatus:'unknown',eventDate:null}]);
   const [notice,setNotice]=useState('');const [confirm,setConfirm]=useState(false);
   const [latest,setLatest]=useState<Review|null>(null);const [previewFailed,setPreviewFailed]=useState(false);
-  const page=data?.pages[index];
-  const dirty=Boolean(page&&(text!==page.correctedText||included!==(page.included!==false)||unreadable!==Boolean(page.unreadable)));
+  const page=data?.pages[Math.min(index,Math.max(0,data.pages.length-1))];
+  const dirty=Boolean(page&&(text!==(page.reviewState==='reviewed'?page.correctedText:page.correctedText||page.rawText||'')||included!==(page.included!==false)||unreadable!==Boolean(page.unreadable)));
   const editable=Boolean(data?.allowedActions.includes('review'))&&!data?.imported;
-  useEffect(()=>{setText(page?.correctedText??'');setIncluded(page?.included!==false&&!page?.unreadable);setUnreadable(Boolean(page?.unreadable));setPreviewFailed(false);},[page?.pageNumber,page?.version]);
-  useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(dirty)e.preventDefault();};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
+  useEffect(()=>{setText(page?.reviewState==='reviewed'?page.correctedText:page?.correctedText||page?.rawText||'');setIncluded(page?.included!==false&&!page?.unreadable);setUnreadable(Boolean(page?.unreadable));setPreviewFailed(false);},[page?.pageNumber,page?.version]);
+  useUnsavedChanges(dirty);
   const save=async()=>{
     if(!page)return;setNotice('');setLatest(null);
     const result=await action.run(()=>patch<DocumentPage&{documentVersion:number}>(`${base}/pages/${page.pageNumber}`,{correctedText:text,included,unreadable,expectedVersion:page.version}));
@@ -50,7 +52,7 @@ export default function ReviewDocument() {
     <Message error={visibleError} success={notice}/>
     {action.error instanceof ApiError&&action.error.status===409&&<Panel title="Review conflict"><p>Your unsaved text is still here. Compare the saved version before replacing it.</p><button className="button" disabled={action.pending} onClick={()=>void loadLatest()}>Compare latest version</button>{latest&&<div className="stack"><pre className="json-details">{latest.pages.find(p=>p.pageNumber===page?.pageNumber)?.correctedText}</pre><button className="button" onClick={()=>{setData(latest);setText(latest.pages[index]?.correctedText||'');setIncluded(latest.pages[index]?.included!==false);setUnreadable(Boolean(latest.pages[index]?.unreadable));setLatest(null);action.setError(null);}}>Replace my edits with latest saved version</button></div>}</Panel>}
     {data?.imported&&<Panel title="Imported historical sessions"><p>This document is confirmed and its page reviews are read-only. Make later corrections through a session amendment.</p>{data.imported.sessions.map(s=><p key={s.id}><Link href={s.href}>Open historical session · pages {s.pageNumbers.join(', ')}</Link></p>)}</Panel>}
-    <Panel title={`Review pages · ${data?.filename||documentId}`} icon="document"><State loading={loading} error={error}>{page&&<>
+    <Panel title={`Review pages · ${data?.filename||documentId}`} icon="document"><State loading={loading} error={error} retry={()=>void reload()}>{page&&<>
       <div className="row between"><button className="button" disabled={index===0||dirty||action.pending} onClick={()=>setIndex(index-1)}>Previous page</button><strong>Page {page.pageNumber} of {data?.pages.length}</strong><button className="button" disabled={index>=(data?.pages.length||0)-1||dirty||action.pending} onClick={()=>setIndex(index+1)}>Next page</button></div>
       {dirty&&<p role="status">Unsaved changes. Save this page before changing pages or importing.</p>}
       <div className="source-layout"><div><h3>Original page</h3>{previewFailed?<p className="notice warning">Preview unavailable. Download the original to compare it.</p>:<img alt={`Original document page ${page.pageNumber}`} src={`${API_BASE}${base}/pages/${page.pageNumber}/original`} style={{maxWidth:'100%',height:'auto'}} onError={()=>setPreviewFailed(true)}/>}
@@ -71,6 +73,6 @@ export default function ReviewDocument() {
       {!allReviewed&&<p className="small muted">Some pages still need a saved review decision.</p>}
       {!has('clinical:write')&&<p>A clinician with permission to write notes must confirm the import.</p>}
     </Panel>}
-    {confirm&&<div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="import-title"><h2 id="import-title">Import reviewed history?</h2><p>This creates {groups.length} read-only historical session note(s) from {includedNumbers.length} reviewed page(s). Page reviews will be locked. Later corrections require an amendment.</p><Message error={visibleError}/><div className="actions"><button autoFocus className="button ghost" disabled={action.pending} onClick={()=>setConfirm(false)}>Cancel</button><button className="button primary" disabled={!canImport} onClick={()=>void commit()}>{action.pending?'Importing…':'Import history'}</button></div></div></div>}
+    <Modal open={confirm} busy={action.pending} onClose={()=>setConfirm(false)} labelledBy="import-title"><h2 id="import-title">Import reviewed history?</h2><p>This creates {groups.length} read-only historical session note(s) from {includedNumbers.length} reviewed page(s). Page reviews will be locked. Later corrections require an amendment.</p><Message error={visibleError}/><div className="actions"><button autoFocus className="button ghost" disabled={action.pending} onClick={()=>setConfirm(false)}>Cancel</button><button className="button primary" disabled={!canImport} onClick={()=>void commit()}>{action.pending?'Importing…':'Import history'}</button></div></Modal>
   </Require>;
 }

@@ -1,6 +1,6 @@
 # Sanctum frontend
 
-Next.js App Router + TypeScript implementation of the frontend guide. All 19 specified routes are present. Normal mode uses live API requests. An explicitly marked synthetic demo API is available for UI review before FastAPI exists.
+Next.js App Router + TypeScript implementation of the frontend guide. All 19 specified routes are present. Normal mode uses live API requests. An explicitly marked synthetic demo API is available for UI review without starting FastAPI.
 
 The interface uses a centered branded login, floating horizontal navigation, and direct workflow tools for session notes, imports/OCR, reviewed AI summaries, indicators, and reports. Global clinical shortcuts select an active authorized patient before opening the task. Admin-only accounts receive clinic tools. Critical review states, evidence links, and confirmation actions remain visible at the point of decision.
 
@@ -35,9 +35,9 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`. Run FastAPI at the `BACKEND_URL` in `.env.local` (default `http://127.0.0.1:8000`). Next.js rewrites same-origin `/api/v1/*` requests to that backend. For production, run the browser and backend behind trusted local HTTPS. The backend must issue secure, HTTP-only session cookies and enforce CSRF protection on writes, permission checks, expiry and version conflicts. This frontend neither stores credentials nor patient records in browser storage.
+Open `http://localhost:3000`. Run FastAPI at the `BACKEND_URL` in `.env.local` (default `http://127.0.0.1:8000`). Next.js rewrites same-origin `/api/v1/*` requests to that backend. For production, run the browser and backend behind trusted local HTTPS. The backend issues HTTP-only session cookies, verifies write-request origins, and enforces permissions, expiry, and version conflicts. Configure production HTTPS and secure cookies on the backend; the frontend sends same-origin cookie requests. This frontend neither stores credentials nor patient records in browser storage.
 
-`npm run typecheck` and `npm run build` check the app. In normal mode, the login and clinical workflows show real request errors until backend endpoints exist. Use synthetic records when integrating or demonstrating.
+`npm run test`, `npm run typecheck`, and `npm run build` check the frontend transport, types, and production bundle. Normal mode uses the implemented FastAPI endpoints and displays unavailable states for unfinished workflows. Use synthetic records when integrating or demonstrating.
 
 Base styles and responsive layouts live in `src/app/globals.css`; shared lighting and motion live in `src/app/effects.css`. Both are imported once in the root layout. TypeScript rejects unused imports, local variables and parameters. Keep the synthetic demo isolated from real API transport when adding features.
 
@@ -61,10 +61,14 @@ The backend should serve the original/page endpoints with protected content type
 ## Current behavior and integration gaps
 
 - The primary patient story has live API wiring: sign in, open scoped patient, start a session, edit with serialized autosave and `expectedVersion`, finalize, refresh the timeline. `409` preserves local note text and offers an explicit retry against the latest version.
-- Documents, page correction/grouping, summary and independent fact review, indicators, report preview/export, users, handover, grants, rule publication, audit and operations have connected screens. They require the proposed FastAPI endpoints and matching DTOs. The backend directory in this repository is currently empty.
+- Documents, page correction/grouping, summary and independent fact review, indicators, report preview/export, users, handover, grants, rule publication, audit and operations have connected screens. FastAPI now implements authentication, patient profiles/timeline/follow-ups, sessions, account management, document storage/extraction, and processing jobs. Summary generation/review, indicators, report export, grants, handovers, rule publication, and backup/restore still need backend implementations. The frontend distinguishes an unimplemented endpoint from a missing patient record.
 - Some advanced details from the SRS still need backend contract decisions and integration: source passage viewer preserving review context, protected duplicate override, server verified truth-table preview for rule publication, precise restore manifest/maintenance state, clinic timezone formatting, pagination and automated end-to-end permission/revocation tests. Do not claim the full 50 FR acceptance suite has passed until those are built and verified.
 - Demo data is confined to the opt-in `/demo-api/v1` route and stored in server memory. Normal mode never calls it. The demo responses are for layout and flow checks; they do not prove FastAPI behavior, persistence, security, OCR/LLM quality or PDF acceptance.
 
 ## Route layout
 
 Authentication lives under `(auth)`; scoped workspace pages under `(workspace)`. Patient tabs share a patient layout, and the app shell shows capability-filtered navigation and an account/sign-out menu. Service health belongs on System health and relevant task screens. UI gates help users, while the backend remains the source of permission decisions.
+
+## Frontend audit — 5 November 2026
+
+See [AUDIT.md](AUDIT.md) for findings, fixes, verification and remaining limitations. Shared native dialogs handle destructive confirmations and logout. Resource requests abort on navigation; patient scope is rechecked before clearing an open record. Server validation details remain visible, and errors offer retries where the operation can recover. Unsaved note and transcription changes warn on reload/close and in-app link navigation. Transcription page buttons require saving first. Browser Back/Forward navigation is not intercepted; save or confirm edits before using it.

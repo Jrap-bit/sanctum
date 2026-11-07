@@ -43,9 +43,10 @@ export default function UsersPage() {
   const update = async (account: Account, operation: string) => {
     setNotice('');
     const result = await action.run(() => post<AccountResult>(`/admin/users/${encodeURIComponent(account.id)}/${operation}`, {}));
-    if (!result) return;
+    if (!result) return false;
     showResult(result, operation === 'deactivate' ? 'Account deactivated. Previous sessions have ended.' : result.credentialAction ? 'New link ready. Any previous link has been cancelled.' : 'Account reactivated. The person can sign in again.');
     await reload();
+    return true;
   };
   return <Require cap="users:manage"><PageHeader title="People & roles"/>
     <Message error={action.error} success={notice}/>
@@ -62,16 +63,16 @@ export default function UsersPage() {
     <div className="grid"><Panel title="Add a teammate" icon="users"><form className="stack" onSubmit={create}>
       <Field label="Name"><input required maxLength={160} value={name} onChange={e => setName(e.target.value)} placeholder="Display name"/></Field>
       <Field label="Username" hint="3–64 letters, numbers, dots, underscores or hyphens."><input required minLength={3} maxLength={64} pattern="[a-zA-Z0-9_.\-]{3,64}" value={username} onChange={e => setUsername(e.target.value)} placeholder="Sign-in name"/></Field>
-      <div className="field"><span>Start with a role</span><div className="preset-grid">{presets.map((p, i) => <button type="button" key={p.name} className={`preset-card ${role === i ? 'selected' : ''}`} onClick={() => {setRole(i); setCaps(p.caps);}}><Icon name={p.icon} size={20}/><strong>{p.name}</strong><small>{p.hint}</small></button>)}</div></div>
+      <div className="field"><span>Start with a role</span><div className="preset-grid">{presets.map((p, i) => <button type="button" key={p.name} className={`preset-card ${role === i ? 'selected' : ''}`} aria-pressed={role === i} onClick={() => {setRole(i); setCaps(p.caps);}}><Icon name={p.icon} size={20}/><strong>{p.name}</strong><small>{p.hint}</small></button>)}</div></div>
       {role !== null && <details className="compact-details"><summary>Fine-tune permissions · {caps.length} selected</summary><p className="small muted">Choose permissions within the selected role.</p><div className="permission-grid">{presets[role].caps.map(cap => <label className="checkbox" key={cap}><input type="checkbox" checked={caps.includes(cap)} onChange={e => setCaps(e.target.checked ? [...caps, cap] : caps.filter(c => c !== cap))}/>{labels[cap]}</label>)}</div></details>}
       <button className="button primary" disabled={action.pending || !caps.length || !name.trim()}><Icon name="plus" size={16}/> Create account</button>
     </form></Panel>
-    <Panel title="Team members" icon="patient"><State loading={loading} error={error} empty={!data?.items.length}>{data?.items.map(u => <div className="list-item" key={u.id}>
+    <Panel title="Team members" icon="patient"><State loading={loading} error={error} retry={()=>void reload()} empty={!data?.items.length}>{data?.items.map(u => <div className="list-item" key={u.id}>
       <div className="row between"><div className="row"><span className="avatar">{u.displayName.charAt(0)}</span><span><strong>{u.displayName}</strong><small style={{display: 'block'}}>@{u.username}</small></span></div><Badge>{!u.credentialsReady ? 'Pending activation' : !u.active ? 'Inactive' : u.resetRequired ? 'Password reset pending' : 'Active'}</Badge></div>
       <details className="compact-details" style={{margin: '12px 0'}}><summary>{u.capabilities.length} permissions</summary><p className="small muted">{u.capabilities.map(c => labels[c] || c).join(' · ') || 'None'}</p></details>
       {u.id === user?.id ? <p className="small muted">Your account. Another administrator can manage your access.</p> : <div className="row">
-        {u.active && u.credentialsReady && <ConfirmAction label="Issue reset" consequence="This signs the person out and blocks their old password. Share the new reset link so they can regain access." busy={action.pending} onConfirm={() => void update(u, 'reset-credential')}/>}
-        {u.active ? <ConfirmAction label="Deactivate" consequence="Active sessions end. Earlier authored notes keep their attribution." busy={action.pending} onConfirm={() => void update(u, 'deactivate')}/> : <button className="button small-button" disabled={action.pending} onClick={() => void update(u, 'reactivate')}>{u.credentialsReady ? 'Reactivate' : 'Issue new activation link'}</button>}
+        {u.active && u.credentialsReady && <ConfirmAction label="Issue reset" consequence="This signs the person out and blocks their old password. Share the new reset link so they can regain access." busy={action.pending} onConfirm={() => update(u, 'reset-credential')}/>}
+        {u.active ? <ConfirmAction label="Deactivate" consequence="Active sessions end. Earlier authored notes keep their attribution." busy={action.pending} onConfirm={() => update(u, 'deactivate')}/> : <button className="button small-button" disabled={action.pending} onClick={() => void update(u, 'reactivate')}>{u.credentialsReady ? 'Reactivate' : 'Issue new activation link'}</button>}
       </div>}
     </div>)}</State></Panel></div>
   </Require>;

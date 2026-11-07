@@ -310,7 +310,7 @@ input.control:focus, textarea.control:focus {
 .pill-choice { padding: 12px 15px; border: 1.5px solid var(--line); border-radius: var(--radius-sm); display: flex; gap: 10px; align-items: flex-start; margin-bottom: 7px; background: var(--paper); transition: border-color var(--transition), background var(--transition); }
 .pill-choice:hover { border-color: var(--teal-300); background: var(--teal-50); }
 .progress { background: var(--line); border-radius: var(--radius-full); overflow: hidden; height: 7px; }
-.progress > span { display: block; background: linear-gradient(90deg,var(--teal-500),var(--teal-400)); height: 100%; border-radius: var(--radius-full); transition: width .4s ease; }
+.progress > span { display: block; background: linear-gradient(90deg,var(--teal-500),var(--teal-400)); height: 100%; border-radius: var(--radius-full); width: 100%; transform-origin: left; transition: transform .2s ease; }
 .json-details { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--paper); padding: 13px; border-radius: var(--radius-sm); border: 1px solid var(--line); color: var(--ink-60); font-family: ui-monospace,monospace; line-height: 1.6; }
 .inline-note { display: flex; align-items: flex-start; gap: 8px; color: var(--muted); padding: 10px 12px; border-radius: 8px; background: var(--line-lt); border: 1px solid var(--line); }
 .inline-note svg { flex: none; color: var(--teal-400); }
@@ -627,3 +627,55 @@ small, .small { font-size: .82rem; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* Shared accessibility and resilience rules. */
+:root {
+  --focus-ring: var(--primary);
+  --control-height: 44px;
+}
+::selection { background: var(--teal-200); color: var(--ink); }
+a { text-underline-offset: .18em; }
+input, textarea { caret-color: var(--primary); }
+.grid > *, .fields > *, .editor-layout > *, .source-layout > *, .row > * { min-width: 0; }
+.panel, .list-item, .page-header-copy, .account-popover, .workflow-patient-results a > span { overflow-wrap: anywhere; }
+.table td { overflow-wrap: anywhere; }
+.table, .editor-meta, .record-summary dd, time { font-variant-numeric: tabular-nums; }
+.field > label { font-weight: inherit; }
+.field:focus-within > label { color: var(--primary); }
+.field .field-error { color: var(--danger); font-weight: 600; }
+.field input[aria-invalid="true"], .field textarea[aria-invalid="true"], .field select[aria-invalid="true"] { border-color: var(--danger); }
+.required-mark { color: var(--primary); }
+.notice ul { margin: 4px 0; padding-inline-start: 20px; }
+.choice-group { display: flex; flex-wrap: wrap; gap: 12px; min-inline-size: 0; margin: 12px 0 0; padding: 0; border: 0; }
+.workflow-steps { overflow-x: auto; }
+.workflow-steps li { flex-shrink: 0; }
+.tabs a { min-height: var(--control-height); }
+.navigation-toggle, .workspace-account summary, .workflow-dialog-close { min-width: var(--control-height); min-height: var(--control-height); }
+.account-popover button { min-height: var(--control-height); }
+.modal { position: fixed; inset: 0; margin: auto; max-height: calc(100dvh - 32px); overflow-y: auto; color: var(--ink); }
+.modal:not([open]) { display: none; }
+.modal::backdrop { background: rgb(8 24 36 / .5); }
+.modal .actions { margin-top: 20px; }
+.modal > .field { margin-bottom: 16px; }
+@media (min-width: 931px) { .editor-sidebar { top: 108px; } }
+@media (max-width: 720px), (pointer: coarse) {
+  .button, .button.small-button { min-height: var(--control-height); }
+  .button { white-space: normal; text-align: center; }
+  .field input, .field select, .field textarea, input.control, select.control, textarea.control { font-size: 1rem; }
+  .pill-choice, .checkbox { min-height: var(--control-height); align-items: center; }
+  .checkbox input, .pill-choice input { flex-shrink: 0; }
+  .modal { width: calc(100% - 32px); padding: 22px; }
+  .modal .actions > .button { flex: 1; }
+  .auth-password button { min-height: 44px; }
+}
+@media (forced-colors: active) {
+  a:focus-visible, button:focus-visible, summary:focus-visible,
+  input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid Highlight; outline-offset: 3px; }
+  .workflow-tool, .button, .tabs a.selected, .preset-card.selected { border: 1px solid ButtonText; }
+}
+
+.button:focus-visible, .workflow-tool:focus-visible { outline-color: var(--focus-ring); }
+
+/* Errors are readable immediately; menu entrances retain an opaque surface. */
+.notice[role="alert"] { animation: none; }
+@keyframes menu-reveal { from { transform: translateY(4px); } to { transform: translateY(0); } }
