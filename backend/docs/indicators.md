@@ -16,7 +16,7 @@ Acknowledge records that the clinician saw the reminder. Dismiss records that th
 
 ## Code and persistence
 
-`app/indicators.py` contains the pure `follow_up_result` decision function, scoped API routes, input snapshots and freshness checks. `IndicatorRun` stores encrypted inputs and computed results separately from encrypted review decisions. Reviews leave the original input/result payload unchanged. This is enforced by the API; there is no database-level immutable-row trigger in this milestone.
+`app/api/indicators.py` contains the pure `follow_up_result` decision function, scoped API routes, input snapshots and freshness checks. `IndicatorRun` stores encrypted inputs and computed results separately from encrypted review decisions. Reviews leave the original input/result payload unchanged. This is enforced by the API; there is no database-level immutable-row trigger in this milestone.
 
 Rule version 1 uses the fixed DT-03 condition from documentation section 8.6. There are no adjustable parameters for this rule. Inputs are actual clinician-created FollowUp records, not AI-proposed follow-up facts. Source links lead to the patient's Follow-ups section.
 
@@ -53,7 +53,7 @@ Missing pairs, unknown/approximate dates, incompatible direction and ambiguous d
 
 A mistaken confirmed rating is withdrawn with a reason, not overwritten. Its original encrypted payload is retained. Record a replacement afterward. There can be only one active rating per source note and normalized scale name. Different notes on the same day can hold ratings, but the comparison refuses to invent their ordering.
 
-Code: `app/ratings.py` contains the scoped entry/withdrawal APIs and pure comparison function; `app/indicators.py` includes rating inputs/results in saved evaluations; `components/ratings-panel.tsx` implements the confirmation form. Creation and withdrawal require indicators:write and patient assignment. Archived patients remain read-only. Values are bounded to 0–10 and non-finite values are rejected. These are documentation indicators, not validated clinical cut-offs or diagnoses.
+Code: `app/api/ratings.py` contains the scoped entry/withdrawal APIs and pure comparison function; `app/api/indicators.py` includes rating inputs/results in saved evaluations; `components/ratings-panel.tsx` implements the confirmation form. Creation and withdrawal require indicators:write and patient assignment. Archived patients remain read-only. Values are bounded to 0–10 and non-finite values are rejected. These are documentation indicators, not validated clinical cut-offs or diagnoses.
 
 API: GET/POST `/api/v1/patients/{id}/ratings`; GET `/ratings/sources`; POST `/ratings/{ratingId}/withdraw` with expectedVersion and reason. Evaluation remains POST `/indicators/evaluate`.
 
@@ -72,7 +72,7 @@ Sessions are identified by note ID, so multiple entries cannot increase one sess
 
 One active concern per source/category is allowed. Wrong entries can be withdrawn with a reason and replaced. Original encrypted values are retained. Source finalization, permissions, archival and expected-version checks follow the rating workflow. Quotation checking verifies that text exists in the source; clinical interpretation still requires clinician review. AI fact confirmation does not automatically create these typed concern records.
 
-Code: `app/concerns.py` contains entry/withdrawal routes, current-session snapshots and the pure repeated-concern evaluator. `app/indicators.py` retains concern/session input snapshots with evaluation results. `components/concerns-panel.tsx` provides entry and withdrawal controls. No new background worker or model dependency is required. Rule-parameter publication remains pending.
+Code: `app/api/concerns.py` contains entry/withdrawal routes, current-session snapshots and the pure repeated-concern evaluator. `app/api/indicators.py` retains concern/session input snapshots with evaluation results. `components/concerns-panel.tsx` provides entry and withdrawal controls. No new background worker or model dependency is required. Rule-parameter publication remains pending.
 
 Verification: 155 backend tests passed. Tests cover 3/3, denied/historical/other-person exclusion, uncertain/missing input, date coverage, duplicates, same-day boundaries, quotation validation, source amendment, access isolation and withdrawal. Live PostgreSQL/frontend-proxy verification created three synthetic source notes and confirmed concerns, verified a matched result, checked existing rating/follow-up workflows and removed the temporary records afterward.
 
@@ -85,7 +85,7 @@ DT-04 version 1 uses the documented default L=30 days, inclusive of both boundar
 
 The source date is the documentation date. The rule describes a change documented within the window, not proof of when the patient actually changed medication. Entries not about the source session should not be confirmed through this form. Correction uses withdrawal with a reason followed by a replacement entry; the original encrypted payload remains stored. Superseded-source and withdrawn entries are excluded, and saved indicator runs become stale when inputs change.
 
-Code: `app/medications.py` implements scoped confirmation/withdrawal and the pure evaluator; `components/medications-panel.tsx` provides the controls. APIs are GET/POST `/patients/{id}/medications`, GET `/medications/sources` and POST `/medications/{id}/withdraw` under `/api/v1`. Access, archive, source-version, duplicate and expected-version checks follow the concern/rating workflows. Confirmations, reads and withdrawals are audited.
+Code: `app/api/medications.py` implements scoped confirmation/withdrawal and the pure evaluator; `components/medications-panel.tsx` provides the controls. APIs are GET/POST `/patients/{id}/medications`, GET `/medications/sources` and POST `/medications/{id}/withdraw` under `/api/v1`. Access, archive, source-version, duplicate and expected-version checks follow the concern/rating workflows. Confirmations, reads and withdrawals are audited.
 
 Verified with 168 backend tests and frontend type checking. Tests cover the 30-day boundary, missing dates, uncertain status, excluded sources, encryption, permissions and history. A live synthetic PostgreSQL/frontend-proxy check exercised medication confirmation and all four currently implemented indicators. Threshold publication and the fifth rule remain pending.
 
@@ -98,7 +98,7 @@ The built-in Session note template, version 1, follows the documented default: a
 
 The scope is all current finalized notes, including reviewed imported history. Drafts and superseded originals are excluded. Imported free-text history may be flagged for missing structured entries; corrections follow the existing amendment workflow. No finalized note is edited automatically. No eligible notes produces Cannot determine. A finalized amendment changes the input fingerprint and makes saved evaluations stale; a new evaluation checks the amendment while retaining earlier results.
 
-`app/documentation.py` creates the source-version and completeness snapshot, stores the template definition in the evaluation inputs, and produces per-note missing-field lists, explanations and source links. It reuses the encrypted evaluation/review/history and patient-scope infrastructure. The template is built in, not yet configurable or published through the oversight UI. Rule publication and configurable templates remain pending.
+`app/services/documentation.py` creates the source-version and completeness snapshot, stores the template definition in the evaluation inputs, and produces per-note missing-field lists, explanations and source links. It reuses the encrypted evaluation/review/history and patient-scope infrastructure. The template is built in, not yet configurable or published through the oversight UI. Rule publication and configurable templates remain pending.
 
 Verification: 182 backend tests and frontend type checking passed. Tests cover the required sections, medication-only/free-text notes, whitespace, known/unknown/approximate dates, draft exclusion, finalized amendments, retained history and access isolation. A live PostgreSQL/frontend-proxy test verified a missing structured section and its correction through amendment alongside the other four rules; temporary synthetic records were removed.
 

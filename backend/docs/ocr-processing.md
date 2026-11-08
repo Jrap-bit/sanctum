@@ -4,9 +4,9 @@ Implemented 5 November 2026. A clinician with access to the patient opens Docume
 
 ## What the code does
 
-- `app/processing.py`: authorises start/retry/cancel, returns completed draft pages and lists recent processing jobs for operations administrators.
-- `app/worker.py`: claims durable PostgreSQL jobs, processes pages, encrypts results, records progress and audit events. Run it separately from FastAPI.
-- `app/extract_page.py`: runs page processing in an isolated child process. PDFium reads existing text and renders scanned pages; local Tesseract recognises image text. Original bytes and rendered images travel through memory/pipes rather than plaintext temporary files.
+- `app/api/processing.py`: authorises start/retry/cancel, returns completed draft pages and lists recent processing jobs for operations administrators.
+- `app/workers/extraction.py`: claims durable PostgreSQL jobs, processes pages, encrypts results, records progress and audit events. Run it separately from FastAPI.
+- `app/adapters/extract_page.py`: runs page processing in an isolated child process. PDFium reads existing text and renders scanned pages; local Tesseract recognises image text. Original bytes and rendered images travel through memory/pipes rather than plaintext temporary files.
 - `ExtractionJob`: one current processing record per document. States are queued, running, completed, failed and cancelled.
 - `ExtractedPage`: numbered encrypted text records, including extraction method and a no-readable-text flag.
 - Migration `0006_extraction`: creates the queue and page tables.
@@ -19,7 +19,7 @@ Tesseract was already installed and the OCR worker was started during implementa
 ```sh
 cd /Users/testuser/Desktop/sanctum/backend
 source .venv/bin/activate
-python -m app.worker
+python -m app.workers.extraction
 ```
 
 Keep FastAPI, the frontend and this worker running. Stopping the worker does not lose queued jobs. The worker waits for jobs in PostgreSQL; it does not need Redis or a cloud service.

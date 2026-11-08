@@ -1,12 +1,12 @@
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from app import rules
+from app.api import rules
 from app.manage import create_user
-from app.models import RuleRevision,RuleHead
-from app.ratings import rating_results
-from app.concerns import concern_results
-from app.medications import medication_results
+from app.db.models import RuleRevision,RuleHead
+from app.domain.rules.dt02_rating_increase import rating_results
+from app.domain.rules.dt01_repeated_concern import concern_results
+from app.domain.rules.dt04_medication_change import medication_results
 from test_patients import setup,create,path,sign_in,PASSWORD
 from test_ratings import row
 from test_concerns import fixtures

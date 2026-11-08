@@ -4,9 +4,9 @@ from PIL import Image, ImageDraw, ImageFont
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from sqlalchemy import select, delete
-from app import worker
-from app.models import ExtractionJob, ExtractedPage, PatientAccess, now
-from app.crypto import decrypt
+from app.workers import extraction as worker
+from app.db.models import ExtractionJob, ExtractedPage, PatientAccess, now
+from app.adapters.crypto import decrypt
 from test_patients import setup, create, path, sign_in
 from test_documents import upload, pdf
 

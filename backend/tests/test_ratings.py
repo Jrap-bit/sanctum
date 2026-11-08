@@ -2,9 +2,9 @@ from datetime import date
 from uuid import uuid4
 import pytest
 from sqlalchemy import select
-from app import indicators
-from app.ratings import rating_results
-from app.models import ConfirmedRating
+from app.services import indicators
+from app.domain.rules.dt02_rating_increase import rating_results
+from app.db.models import ConfirmedRating
 from test_patients import setup,create,path,sign_in
 from test_sessions import new_note,saved,finalized,url
 

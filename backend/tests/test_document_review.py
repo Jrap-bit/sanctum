@@ -4,10 +4,11 @@ import pytest
 from pypdf import PdfWriter
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from app import worker, review
-from app.models import ClinicalNote, DocumentImport, StoredDocument
-from app.patients import clinic_today
-from app.sessions import content_of
+from app.workers import extraction as worker
+from app.api import review
+from app.db.models import ClinicalNote, DocumentImport, StoredDocument
+from app.services.patients import clinic_today
+from app.services.sessions import content_of
 from test_patients import setup, create, path, sign_in
 from test_documents import upload
 

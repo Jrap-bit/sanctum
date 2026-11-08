@@ -2,8 +2,8 @@ from datetime import date
 from uuid import uuid4
 import pytest
 from sqlalchemy import select
-from app.concerns import concern_results
-from app.models import ConfirmedConcern
+from app.domain.rules.dt01_repeated_concern import concern_results
+from app.db.models import ConfirmedConcern
 from test_patients import setup,create,path,sign_in
 from test_sessions import new_note,saved,finalized,url
 

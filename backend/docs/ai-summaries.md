@@ -12,19 +12,19 @@ From the backend directory, with the virtual environment activated:
 
 ```sh
 alembic upgrade head
-python -m app.summary_worker
+python -m app.workers.summary
 ```
 
-Keep that terminal running alongside FastAPI, the frontend, and the separate OCR worker (`python -m app.worker`). Ollama must also be running locally. Defaults in `.env.example` are `OLLAMA_URL=http://127.0.0.1:11434` and `SUMMARY_MODEL=qwen3:8b`. The current development machine already has that model installed. On another machine, install Ollama and download the configured local model (`ollama pull qwen3:8b`), or configure another compatible installed model. Model quality and resource requirements vary; test a replacement before relying on it. **Check model** refreshes availability.
+Keep that terminal running alongside FastAPI, the frontend, and the separate OCR worker (`python -m app.workers.extraction`). Ollama must also be running locally. Defaults in `.env.example` are `OLLAMA_URL=http://127.0.0.1:11434` and `SUMMARY_MODEL=qwen3:8b`. The current development machine already has that model installed. On another machine, install Ollama and download the configured local model (`ollama pull qwen3:8b`), or configure another compatible installed model. Model quality and resource requirements vary; test a replacement before relying on it. **Check model** refreshes availability.
 
 No cloud model API or API key is used. Only loopback HTTP addresses are accepted, proxy environment variables are ignored, redirects are disabled, and generation requires an installed non-remote model. Administrators must keep the local Ollama installation and model configuration trusted.
 
 ## Code map
 
-- `app/ai.py`: prepares the prompt and JSON schema, splits sources into numbered exact passages, asks Ollama to cite passage IDs, attaches the original text itself, and validates output shape and references. The model no longer has to reproduce quotations. Unknown references and unsupported quotations fail the job.
-- `app/summaries.py`: checks permissions and patient assignment, selects finalized current records, queues jobs, serves summaries, and records version-checked review decisions.
-- `app/summary_worker.py`: claims durable jobs, calls the model outside the database transaction, rechecks access and source versions, and saves encrypted drafts. Cancellation prevents late output from being saved.
-- `app/models.py` and migration `0008_ai_summaries`: encrypted summary/job payloads and relational queue metadata.
+- `app/adapters/llm.py`: prepares the prompt and JSON schema, splits sources into numbered exact passages, asks Ollama to cite passage IDs, attaches the original text itself, and validates output shape and references. The model no longer has to reproduce quotations. Unknown references and unsupported quotations fail the job.
+- `app/api/summaries.py`: checks permissions and patient assignment, selects finalized current records, queues jobs, serves summaries, and records version-checked review decisions.
+- `app/workers/summary.py`: claims durable jobs, calls the model outside the database transaction, rechecks access and source versions, and saves encrypted drafts. Cancellation prevents late output from being saved.
+- `app/db/models.py` and migration `0008_ai_summaries`: encrypted summary/job payloads and relational queue metadata.
 - Summary frontend pages: source selection, availability, progress, cancel/retry, previous drafts, quotations and separate review controls.
 
 Sources include the exact saved note versions. Original generated prose, facts, model digest, prompt version and review history are retained. A finalized amendment makes summaries using the older source stale; stale summaries cannot be accepted or have facts confirmed. A draft amendment alone does not replace the finalized source.

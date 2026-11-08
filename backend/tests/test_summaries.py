@@ -1,8 +1,9 @@
 from uuid import uuid4
 import pytest
 from sqlalchemy import select
-from app import ai, summary_worker
-from app.models import AISummary, SummaryJob
+from app.adapters import llm as ai
+from app.workers import summary as summary_worker
+from app.db.models import AISummary, SummaryJob
 from test_patients import setup, create, path, sign_in
 from test_sessions import new_note, saved, finalized, url
 

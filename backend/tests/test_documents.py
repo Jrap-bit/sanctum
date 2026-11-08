@@ -5,9 +5,9 @@ from PIL import Image
 from pypdf import PdfWriter
 from sqlalchemy import select, delete
 from sqlalchemy.exc import SQLAlchemyError
-from app import documents
-from app.crypto import decrypt
-from app.models import StoredDocument, PatientAccess, AuditEvent, PatientEvent
+from app.services import documents
+from app.adapters.crypto import decrypt
+from app.db.models import StoredDocument, PatientAccess, AuditEvent, PatientEvent
 from test_patients import setup, create, path, sign_in
 
 

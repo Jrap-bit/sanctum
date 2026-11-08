@@ -14,8 +14,8 @@ Example: OCR reads “2 days”, but the original says “2 weeks”. Correct th
 
 ## What the code does and why
 
-- `app/review.py` provides page review, safe previews and confirmed history import. It checks patient access and account permissions on every request.
-- `app/preview_page.py` renders a PDF page or image to an inert PNG in a bounded subprocess. The review screen shows this PNG rather than embedding an active original PDF. Originals remain downloadable.
+- `app/api/review.py` provides page review, safe previews and confirmed history import. It checks patient access and account permissions on every request.
+- `app/adapters/preview_page.py` renders a PDF page or image to an inert PNG in a bounded subprocess. The review screen shows this PNG rather than embedding an active original PDF. Originals remain downloadable.
 - `ExtractedPage.version` prevents stale edits overwriting a newer page review. Raw extraction and corrected text are stored separately in the encrypted page payload.
 - `StoredDocument.review_version` changes whenever a page is reviewed. Confirmation checks this document-wide version, preventing import of a stale page-review snapshot.
 - `DocumentImport` stores the encrypted confirmation result and request signature. Its document primary key permits only one confirmed import per document.

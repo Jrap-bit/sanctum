@@ -1,16 +1,18 @@
 """Local operator commands; passwords are prompted, never command-line arguments."""
-import argparse
 from getpass import getpass
-import re
-from uuid import uuid4
-
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import SQLAlchemyError
+from uuid import uuid4
+import argparse
+import re
 
-from .account_service import invalidate_credentials
-from .database import SessionLocal
-from .models import AuditEvent, User
-from .security import ROLE_CAPABILITIES, passwords
+from .core.capabilities import ROLE_CAPABILITIES
+from .core.database import SessionLocal
+from .core.security import passwords
+from .db.models import AuditEvent
+from .db.models import User
+from .services.accounts import invalidate_credentials
 
 
 def read_password():

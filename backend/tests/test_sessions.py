@@ -6,8 +6,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.main import app
-from app.models import AuditEvent, ClinicalNote, PatientAccess, User
-from app.security import COOKIE_NAME
+from app.db.models import AuditEvent, ClinicalNote, PatientAccess, User
+from app.core.security import COOKIE_NAME
 from test_patients import setup, create, path, sign_in  # Shared isolated database/key fixture.
 
 
@@ -201,7 +201,7 @@ def test_revocation_and_deactivation_apply_to_existing_notes(setup):
 
 
 def test_audit_failure_rolls_back_finalization(setup, monkeypatch):
-    from app import sessions
+    from app.api import sessions
     client, _, _ = setup
     patient = create(client)
     note = saved(client, patient, new_note(client, patient), text="Keep as draft if audit fails")
@@ -215,7 +215,7 @@ def test_audit_failure_rolls_back_finalization(setup, monkeypatch):
 
 
 def test_session_creation_after_future_follow_up(setup):
-    from app.patients import clinic_today
+    from app.services.patients import clinic_today
     client, _, _ = setup
     patient = create(client)
     future = (clinic_today() + timedelta(days=7)).isoformat()

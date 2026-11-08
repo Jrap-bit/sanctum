@@ -1,5 +1,5 @@
 import pytest
-from app.documentation import TEMPLATE,documentation_results
+from app.domain.rules.dt05_required_documentation import TEMPLATE,documentation_results
 from test_patients import setup,create,path,sign_in
 from test_sessions import new_note,saved,finalized,url
 

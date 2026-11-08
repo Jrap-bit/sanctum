@@ -8,14 +8,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.pool import StaticPool
 
-from app.config import get_settings
-from app.crypto import initialize_key
-from app.crypto import encrypt
-from app.database import Base, get_db
+from app.core.config import get_settings
+from app.adapters.crypto import initialize_key
+from app.adapters.crypto import encrypt
+from app.core.database import Base, get_db
 from app.main import app
 from app.manage import create_user
-from app.models import AuditEvent, FollowUp, Patient, PatientAccess, User
-from app.security import COOKIE_NAME
+from app.db.models import AuditEvent, FollowUp, Patient, PatientAccess, User
+from app.core.security import COOKIE_NAME
 
 PASSWORD = "Synthetic-patient-test-42"
 HEADERS = {"Origin": "http://localhost:3000"}
@@ -209,7 +209,7 @@ def test_database_rejects_two_writers_using_the_same_version(setup):
 
 def test_audit_failure_rolls_back_patient_creation(setup, monkeypatch):
     from sqlalchemy.exc import SQLAlchemyError
-    from app import patients
+    from app.api import patients
     client, factory, _ = setup
     def unavailable(*args):
         raise SQLAlchemyError("Synthetic audit outage")

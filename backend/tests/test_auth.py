@@ -6,12 +6,12 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.config import get_settings
-from app.database import Base, get_db
+from app.core.config import get_settings
+from app.core.database import Base, get_db
 from app.main import app
 from app.manage import create_user
-from app.models import AuditEvent, LoginSession, User, now
-from app.security import COOKIE_NAME, token_digest
+from app.db.models import AuditEvent, LoginSession, User, now
+from app.core.security import COOKIE_NAME, token_digest
 
 PASSWORD = "Synthetic-test-password-42"
 ORIGIN = {"Origin": "http://localhost:3000"}

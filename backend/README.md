@@ -21,7 +21,7 @@ pip install -r requirements.txt
 cp -n .env.example .env
 docker compose up -d db
 alembic upgrade head
-python -m app.crypto
+python -m app.adapters.crypto
 python -m app.manage create-user --username clinician --name "My Clinician" --role clinician
 python -m uvicorn app.main:app --reload --reload-dir app
 ```
@@ -38,7 +38,7 @@ Stop FastAPI with Control+C before installing the new password dependency. Then:
 source .venv/bin/activate
 pip install -r requirements.txt
 alembic upgrade head
-python -m app.crypto
+python -m app.adapters.crypto
 python -m app.manage create-user --username clinician --name "My Clinician" --role clinician
 python -m uvicorn app.main:app --reload --reload-dir app
 ```
@@ -142,7 +142,7 @@ pagination and indexed encrypted-search design are not implemented.
 
 ### Local encrypted storage
 
-`python -m app.crypto` creates secrets/clinical.key with owner-only file permissions,
+`python -m app.adapters.crypto` creates secrets/clinical.key with owner-only file permissions,
 only if missing. Existing keys are retained. This path is excluded from Git. Names,
 birth dates and follow-up content are encrypted using Fernet before database storage.
 An encrypted record includes its context ID to detect copying ciphertext between records.
@@ -220,7 +220,7 @@ Patient-scoped encrypted PDF/JPEG/PNG upload, listing and original download are 
 
 ## Local OCR worker
 
-After installing requirements and applying migration `0006_extraction`, run `python -m app.worker` in a separate backend terminal. In Documents, choose **Start extraction**, then **View extracted text** when completed. Tesseract and its language data are required for scanned pages/images. Results remain unreviewed drafts. See [OCR workflow, setup and limitations](docs/ocr-processing.md).
+After installing requirements and applying migration `0006_extraction`, run `python -m app.workers.extraction` in a separate backend terminal. In Documents, choose **Start extraction**, then **View extracted text** when completed. Tesseract and its language data are required for scanned pages/images. Results remain unreviewed drafts. See [OCR workflow, setup and limitations](docs/ocr-processing.md).
 
 
 ## Review and import historical documents
@@ -230,7 +230,7 @@ Apply migration `0007_document_review`, then open **Review pages** after extract
 
 ## Local AI summary drafts
 
-Apply migration `0008_ai_summaries`, keep Ollama running with the configured local model, and start `python -m app.summary_worker` in another backend terminal. Select finalized records in **New AI summary**, generate a referenced draft, then review the prose and suggested facts separately. See [setup, workflow, code explanation and limits](docs/ai-summaries.md).
+Apply migration `0008_ai_summaries`, keep Ollama running with the configured local model, and start `python -m app.workers.summary` in another backend terminal. Select finalized records in **New AI summary**, generate a referenced draft, then review the prose and suggested facts separately. See [setup, workflow, code explanation and limits](docs/ai-summaries.md).
 
 
 ## Follow-up indicators

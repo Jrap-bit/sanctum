@@ -2,9 +2,11 @@ from datetime import date,timedelta
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from app import indicators
-from app.models import IndicatorRun
-from app.crypto import decrypt
+from app.services import indicators
+from app.domain.rules.dt03_followup_outstanding import follow_up_result
+from app.api import indicators as indicators_api
+from app.db.models import IndicatorRun
+from app.adapters.crypto import decrypt
 from test_patients import setup,create,path,sign_in
 
 @pytest.mark.parametrize('state,due,expected',[
@@ -12,7 +14,7 @@ from test_patients import setup,create,path,sign_in
  ('open',None,'not_evaluable'),('open','bad','not_evaluable'),('completed','2026-11-01','not_matched'),
  ('cancelled',None,'not_matched'),('unknown','2026-11-01','not_evaluable')])
 def test_boundaries(state,due,expected):
- assert indicators.follow_up_result({'state':state,'dueDate':due},date(2026,11,6))[0]==expected
+ assert follow_up_result({'state':state,'dueDate':due},date(2026,11,6))[0]==expected
 
 def task(c,p,due=None):
  r=c.post(path(p)+'/follow-ups',json={'title':'Synthetic follow-up','dueDate':due});assert r.status_code==201,r.text;return r.json()
@@ -57,6 +59,6 @@ def test_stale_review_and_audit_rollback(setup,monkeypatch):
  task(c,p)
  assert c.post(base+'/'+i['id']+'/review',json={'evaluationId':result['evaluationId'],'expectedVersion':1,'decision':'acknowledge'}).status_code==409
  def fail(*args):raise SQLAlchemyError('synthetic audit failure')
- monkeypatch.setattr(indicators,'record_audit',fail)
+ monkeypatch.setattr(indicators_api,'record_audit',fail)
  assert c.post(base+'/evaluate').status_code==503
  with factory() as db:assert len(db.scalars(select(IndicatorRun)).all())==1

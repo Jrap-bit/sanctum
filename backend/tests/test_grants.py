@@ -1,6 +1,6 @@
 from test_patients import setup,sign_in,create,path,PASSWORD
 from app.manage import create_user
-from app.models import User,ClinicalGrant
+from app.db.models import User,ClinicalGrant
 ROOT='/api/v1/access/grants'
 def prepare(setup,cap='clinical:read'):
  c,f,ids=setup;p=create(c)
@@ -55,7 +55,8 @@ def test_cancel(setup):
 
 def test_read_only_blocks_clinical_work_and_workers(setup):
  from types import SimpleNamespace
- from app import worker,summary_worker
+ from app.workers import extraction as worker
+ from app.workers import summary as summary_worker
  c,f,ids,p,g=prepare(setup)
  g=approve(c,g);sign_in(c,'bob')
  assert c.post(path(p)+'/sessions',json={'eventDate':None}).status_code==404
@@ -67,7 +68,8 @@ def test_read_only_blocks_clinical_work_and_workers(setup):
 
 def test_worker_scope_changes_on_revoke(setup):
  from types import SimpleNamespace
- from app import worker,summary_worker
+ from app.workers import extraction as worker
+ from app.workers import summary as summary_worker
  c,f,ids,p,g=prepare(setup,'clinical:write');g=approve(c,g)
  job=SimpleNamespace(requested_by=ids['bob'],patient_id=p['id'])
  with f() as db:

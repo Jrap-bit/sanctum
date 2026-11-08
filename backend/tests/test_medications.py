@@ -1,8 +1,8 @@
 from datetime import date
 import pytest
 from sqlalchemy import select
-from app.medications import medication_results
-from app.models import ConfirmedMedication
+from app.domain.rules.dt04_medication_change import medication_results
+from app.db.models import ConfirmedMedication
 from test_patients import setup,create,path,sign_in
 from test_sessions import new_note,saved,finalized,url
 

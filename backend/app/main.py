@@ -1,43 +1,30 @@
-from uuid import uuid4
-
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
+from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm.exc import StaleDataError
 from starlette.exceptions import HTTPException
+from uuid import uuid4
 
-from .admin_users import router as admin_router
-from .auth import router as auth_router
-from .config import get_settings
-from .patients import router as patient_router
-from .sessions import router as session_router
-from .documents import router as document_router
-from .processing import router as processing_router
-from .review import router as review_router
-from .summaries import router as summary_router
-from .indicators import router as indicator_router
-from .ratings import router as rating_router
-from .concerns import router as concern_router
-from .medications import router as medication_router
-from .rules import router as rule_router
-from .grants import router as grant_router
+from .api.admin_users import router as admin_router
+from .api.auth import router as auth_router
+from .api.concerns import router as concern_router
+from .api.documents import router as document_router
+from .api.grants import router as grant_router
+from .api.indicators import router as indicator_router
+from .api.medications import router as medication_router
+from .api.patients import router as patient_router
+from .api.processing import router as processing_router
+from .api.ratings import router as rating_router
+from .api.review import router as review_router
+from .api.rules import router as rule_router
+from .api.sessions import router as session_router
+from .api.summaries import router as summary_router
+from .core.config import get_settings
+
 
 app = FastAPI(title="Sanctum API", version="0.5.0")
-app.include_router(auth_router)
-app.include_router(admin_router)
-app.include_router(patient_router)
-app.include_router(session_router)
-app.include_router(document_router)
-app.include_router(processing_router)
-app.include_router(review_router)
-app.include_router(summary_router)
-app.include_router(indicator_router)
-app.include_router(rating_router)
-app.include_router(concern_router)
-app.include_router(medication_router)
-app.include_router(rule_router)
-app.include_router(grant_router)
 
 
 def error(request, status, code, message, fields=None):
@@ -90,3 +77,45 @@ async def stale_update(request, exc):
 @app.get("/api/v1/health", tags=["Health"])
 def health():
     return {"status": "ok"}
+
+
+app.include_router(auth_router)
+
+
+app.include_router(admin_router)
+
+
+app.include_router(patient_router)
+
+
+app.include_router(session_router)
+
+
+app.include_router(document_router)
+
+
+app.include_router(processing_router)
+
+
+app.include_router(review_router)
+
+
+app.include_router(summary_router)
+
+
+app.include_router(indicator_router)
+
+
+app.include_router(rating_router)
+
+
+app.include_router(concern_router)
+
+
+app.include_router(medication_router)
+
+
+app.include_router(rule_router)
+
+
+app.include_router(grant_router)
