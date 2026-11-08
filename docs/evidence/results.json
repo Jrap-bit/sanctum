@@ -1,5 +1,5 @@
 {
-  "run_date": "2026-11-08T19:35:49.753583+00:00",
+  "run_date": "2026-11-08T20:10:05.350515+00:00",
   "host_platform": "Darwin 27.2.0 (arm64)",
   "python_version": "3.13.16",
   "model_digests": {
@@ -13,7 +13,7 @@
       {
         "id": "ocr_page_1",
         "variant": "large_clean",
-        "latency_seconds": 0.2277,
+        "latency_seconds": 0.2307,
         "raw_cer": 0.0133,
         "norm_cer": 0.0133,
         "raw_wer": 0.0339,
@@ -24,7 +24,7 @@
       {
         "id": "ocr_page_2",
         "variant": "large_clean",
-        "latency_seconds": 0.1817,
+        "latency_seconds": 0.1865,
         "raw_cer": 0.0047,
         "norm_cer": 0.0047,
         "raw_wer": 0.0169,
@@ -46,7 +46,7 @@
       {
         "id": "ocr_page_4",
         "variant": "noisy_rotated",
-        "latency_seconds": 0.2041,
+        "latency_seconds": 0.2072,
         "raw_cer": 0.0153,
         "norm_cer": 0.0153,
         "raw_wer": 0.1207,
@@ -57,7 +57,7 @@
       {
         "id": "ocr_page_5",
         "variant": "noisy_rotated",
-        "latency_seconds": 0.2028,
+        "latency_seconds": 0.2061,
         "raw_cer": 0.0092,
         "norm_cer": 0.0092,
         "raw_wer": 0.1071,
@@ -68,7 +68,7 @@
       {
         "id": "ocr_page_6",
         "variant": "small_font",
-        "latency_seconds": 0.1553,
+        "latency_seconds": 0.1637,
         "raw_cer": 0.0,
         "norm_cer": 0.0,
         "raw_wer": 0.0,
@@ -78,7 +78,7 @@
       }
     ],
     "median": {
-      "median_latency_seconds": 0.1925,
+      "median_latency_seconds": 0.1963,
       "median_raw_cer": 0.0069,
       "median_norm_cer": 0.0069,
       "median_raw_wer": 0.0254,
@@ -92,8 +92,8 @@
   "llm": {
     "qwen3:4b": {
       "model": "qwen3:4b",
-      "latency_p50_seconds": 22.3384,
-      "latency_p95_seconds": 23.8163,
+      "latency_p50_seconds": 16.3685,
+      "latency_p95_seconds": 17.2457,
       "success_rate": 1.0,
       "required_phrase_recall": 1.0,
       "forbidden_phrase_count": 0,
@@ -107,8 +107,8 @@
     },
     "qwen3:1.7b": {
       "model": "qwen3:1.7b",
-      "latency_p50_seconds": 11.9629,
-      "latency_p95_seconds": 14.0226,
+      "latency_p50_seconds": 6.9972,
+      "latency_p95_seconds": 8.8348,
       "success_rate": 1.0,
       "required_phrase_recall": 1.0,
       "forbidden_phrase_count": 0,
@@ -122,8 +122,8 @@
     },
     "llama3.2:3b": {
       "model": "llama3.2:3b",
-      "latency_p50_seconds": 17.6778,
-      "latency_p95_seconds": 25.1732,
+      "latency_p50_seconds": 15.6212,
+      "latency_p95_seconds": 19.2509,
       "success_rate": 1.0,
       "required_phrase_recall": 0.8333,
       "forbidden_phrase_count": 0,
@@ -137,12 +137,12 @@
     },
     "gemma4:e2b": {
       "model": "gemma4:e2b",
-      "latency_p50_seconds": 7.1333,
-      "latency_p95_seconds": 13.8488,
+      "latency_p50_seconds": 4.8718,
+      "latency_p95_seconds": 10.0886,
       "success_rate": 1.0,
       "required_phrase_recall": 0.7222,
       "forbidden_phrase_count": 0,
-      "facts_proposed": 19,
+      "facts_proposed": 20,
       "failure_counts": {
         "unsupported_evidence": 0,
         "invalid_generation": 0,

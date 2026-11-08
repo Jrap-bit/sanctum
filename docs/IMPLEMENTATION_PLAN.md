@@ -4,6 +4,8 @@
 **Written:** 8 November 2026 · **rev 4** rebuilt against the real upstream code at `ddb6465`.
 **Repo:** https://github.com/Jrap-bit/sanctum
 
+> **Status, 9 November 2026: implementation complete on branch `feature/backend-hardening`.** What was run and what was not is recorded in `docs/evidence/verification-summary.md`, which supersedes the planning status below. Google sign-in is built and tested only with mocks. MinIO images could not be pulled, so `FilesystemStore` is the default.
+
 Rev 1–3 were written against a stale local `main` and assumed an empty backend. Upstream actually
 contains ~3,558 lines of app code, 1,714 lines of tests and 14 migrations. The code was surveyed by reading key modules and listing routes; **the test baseline is still pending, so nothing below marked "present" has been verified to work.** This revision is a
 **gap analysis and remediation plan**, not a from-scratch build.

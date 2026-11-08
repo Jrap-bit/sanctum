@@ -1,6 +1,6 @@
 # Sanctum Evaluation Report (§9.10)
 
-- **Run Date:** 2026-11-08T19:35:49.753583+00:00
+- **Run Date:** 2026-11-08T20:10:05.350515+00:00
 - **Host Platform:** Darwin 27.2.0 (arm64)
 - **Python Version:** 3.13.16
 
@@ -15,18 +15,18 @@
 
 | Page ID | Variant | Latency (s) | Raw CER | Norm CER | Raw WER | Norm WER | Status |
 |---|---|---|---|---|---|---|---|
-| ocr_page_1 | large_clean | 0.2277 | 0.0133 | 0.0133 | 0.0339 | 0.0339 | pass |
-| ocr_page_2 | large_clean | 0.1817 | 0.0047 | 0.0047 | 0.0169 | 0.0169 | pass |
+| ocr_page_1 | large_clean | 0.2307 | 0.0133 | 0.0133 | 0.0339 | 0.0339 | pass |
+| ocr_page_2 | large_clean | 0.1865 | 0.0047 | 0.0047 | 0.0169 | 0.0169 | pass |
 | ocr_page_3 | large_clean | 0.1821 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | pass |
-| ocr_page_4 | noisy_rotated | 0.2041 | 0.0153 | 0.0153 | 0.1207 | 0.1207 | pass |
-| ocr_page_5 | noisy_rotated | 0.2028 | 0.0092 | 0.0092 | 0.1071 | 0.1071 | pass |
-| ocr_page_6 | small_font | 0.1553 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | pass |
+| ocr_page_4 | noisy_rotated | 0.2072 | 0.0153 | 0.0153 | 0.1207 | 0.1207 | pass |
+| ocr_page_5 | noisy_rotated | 0.2061 | 0.0092 | 0.0092 | 0.1071 | 0.1071 | pass |
+| ocr_page_6 | small_font | 0.1637 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | pass |
 
 ### OCR Summary (Median)
 
 | Metric | Value |
 |---|---|
-| Median Latency | 0.1925s |
+| Median Latency | 0.1963s |
 | Median Raw CER | 0.0069 |
 | Median Norm CER | 0.0069 |
 | Median Raw WER | 0.0254 |
@@ -43,10 +43,10 @@ handwritten: not measured
 
 | Model | Latency p50 (s) | Latency p95 (s) | Success Rate | Required Recall | Forbidden Count | Facts Proposed | Errors (unsupported / invalid / incomplete / unavailable) |
 |---|---|---|---|---|---|---|---|
-| qwen3:4b | 22.3384 | 23.8163 | 100.0% | 100.0% | 0 | 26 | 0 / 0 / 0 / 0 |
-| qwen3:1.7b | 11.9629 | 14.0226 | 100.0% | 100.0% | 0 | 18 | 0 / 0 / 0 / 0 |
-| llama3.2:3b | 17.6778 | 25.1732 | 100.0% | 83.3% | 0 | 20 | 0 / 0 / 0 / 0 |
-| gemma4:e2b | 7.1333 | 13.8488 | 100.0% | 72.2% | 0 | 19 | 0 / 0 / 0 / 0 |
+| qwen3:4b | 16.3685 | 17.2457 | 100.0% | 100.0% | 0 | 26 | 0 / 0 / 0 / 0 |
+| qwen3:1.7b | 6.9972 | 8.8348 | 100.0% | 100.0% | 0 | 18 | 0 / 0 / 0 / 0 |
+| llama3.2:3b | 15.6212 | 19.2509 | 100.0% | 83.3% | 0 | 20 | 0 / 0 / 0 / 0 |
+| gemma4:e2b | 4.8718 | 10.0886 | 100.0% | 72.2% | 0 | 20 | 0 / 0 / 0 / 0 |
 
 ## Limitations
 

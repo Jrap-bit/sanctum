@@ -22,6 +22,13 @@ x-backend: &x-backend
     LLM_ENGINE: ${LLM_ENGINE:-ollama}
     LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
     SUMMARY_MODEL: ${SUMMARY_MODEL:-qwen3:4b}
+    LLM_MODELS: ${LLM_MODELS:-["qwen3:4b","qwen3:1.7b","llama3.2:3b","gemma4:e2b"]}
+    TEXT_EXTRACTOR: ${TEXT_EXTRACTOR:-pdfium}
+    S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+    S3_BUCKET: ${S3_BUCKET:-sanctum-originals}
+    S3_REGION: ${S3_REGION:-us-east-1}
+    S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+    S3_SECRET_KEY: ${S3_SECRET_KEY:-}
     OCR_ENGINE: ${OCR_ENGINE:-tesseract}
     GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
