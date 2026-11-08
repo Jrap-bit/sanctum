@@ -76,7 +76,13 @@ def main():
     restore_parser = commands.add_parser("restore")
     restore_parser.add_argument("--verify-first", required=True)
     commands.add_parser("seed-synthetic")
+    smoke_parser = commands.add_parser("smoke-test")
+    smoke_parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     args = parser.parse_args()
+    if args.command == "smoke-test":
+        from .smoke import run
+        success = run(args.base_url)
+        sys.exit(0 if success else 1)
     try:
         with SessionLocal() as db:
             if args.command == "backup":
