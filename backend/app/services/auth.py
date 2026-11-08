@@ -1,15 +1,62 @@
-import redis
+import base64
+import hashlib
+import json
+import secrets
+import urllib.parse
 from fastapi import HTTPException
+import httpx
+from pydantic import BaseModel
+import redis
 from sqlalchemy import select
 
+from ..core.cache import get_redis
 from ..core.config import get_settings
 from ..core.security import COOKIE_NAME
+from ..core.security import dummy_hash
+from ..core.security import passwords
+from ..core.security import token_digest
 from ..db.models import AuditEvent
 from ..db.models import User
+from .rate_limits import clear_failures
+from .rate_limits import consume
+from .rate_limits import record_failure
 from .rate_limits import retry_after
 from .session_store import create_session
+from .session_store import create_ws_ticket
 from .session_store import delete_session
 from .session_store import read_session
+
+
+class UserOutput(BaseModel):
+    id: str
+    displayName: str
+    username: str
+    capabilities: list[str]
+    clinicTimezone: str
+
+
+def public_user(user: User) -> UserOutput:
+    return UserOutput(
+        id=user.id,
+        displayName=user.display_name,
+        username=user.username,
+        capabilities=user.capabilities,
+        clinicTimezone=get_settings().clinic_timezone,
+    )
+
+
+def google_enabled() -> bool:
+    settings = get_settings()
+    return bool(
+        settings.google_client_id
+        and settings.google_client_secret
+        and settings.google_client_secret.get_secret_value()
+        and settings.google_redirect_uri
+    )
+
+
+def providers() -> dict:
+    return {"google": google_enabled()}
 
 
 def user_from_request(request, db):
@@ -78,3 +125,182 @@ def verify_google_token(raw: str) -> dict:
 
     settings = get_settings()
     return id_token.verify_oauth2_token(raw, Request(), settings.google_client_id)
+
+
+def login(db, request, data) -> str:
+    address = request.client.host if request.client else "unknown"
+    delay = login_delay(data.username, address)
+    if delay > 0:
+        audit(db, request, "auth.login", "rate_limited")
+        db.commit()
+        raise HTTPException(
+            429,
+            "Too many sign-in attempts. Try again shortly.",
+            headers={"Retry-After": str(delay)},
+        )
+    user = db.scalar(select(User).where(User.username == data.username).with_for_update())
+    valid = passwords.verify(data.password, user.password_hash if user else dummy_hash)
+    if not valid or user is None or not user.active or not user.credentials_ready or user.password_reset_required:
+        record_failure("account", data.username, threshold=5)
+        record_failure("address", address, threshold=50)
+        audit(db, request, "auth.login", "denied")
+        db.commit()
+        raise HTTPException(401, "Invalid username or password.")
+    clear_failures("account", data.username)
+    audit(db, request, "auth.login", "success", user.id)
+    db.commit()
+    return user.id
+
+
+def logout(db, request, token: str | None) -> None:
+    if token:
+        user_id = read_session(token)
+        if user_id:
+            audit(db, request, "auth.logout", "success", user_id)
+        delete_session(token)
+    db.commit()
+
+
+def ws_ticket(user) -> dict:
+    return {"ticket": create_ws_ticket(user.id)}
+
+
+def activate(db, request, data) -> dict:
+    from .accounts import account_audit
+    from .accounts import redeem_credential_link
+
+    address = request.client.host if request.client else "unknown"
+    if not consume("credential-address", address, 30):
+        account_audit(db, request, "credential.redeem", "rate_limited")
+        db.commit()
+        raise HTTPException(429, "Too many attempts. Try again in 15 minutes.")
+    return redeem_credential_link(db, request, data.token, data.password)
+
+
+def google_login_url(next: str = "/patients") -> str:
+    if not google_enabled():
+        raise HTTPException(404, "Google sign-in is not configured.")
+    target_next = next if next.startswith("/") and not next.startswith("//") else "/patients"
+    state = secrets.token_urlsafe(32)
+    nonce = secrets.token_urlsafe(32)
+    verifier = secrets.token_urlsafe(64)
+    challenge_bytes = hashlib.sha256(verifier.encode("ascii")).digest()
+    code_challenge = base64.urlsafe_b64encode(challenge_bytes).decode("ascii").rstrip("=")
+
+    redis_client = get_redis()
+    state_key = f"oauth:{token_digest(state)}"
+    redis_client.set(
+        state_key,
+        json.dumps({"verifier": verifier, "nonce": nonce, "next": target_next}),
+        ex=600,
+    )
+
+    settings = get_settings()
+    params = {
+        "response_type": "code",
+        "client_id": settings.google_client_id,
+        "redirect_uri": settings.google_redirect_uri,
+        "scope": "openid email profile",
+        "state": state,
+        "nonce": nonce,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "prompt": "select_account",
+    }
+    return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+
+
+def google_callback(
+    db,
+    request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> tuple[str, str | None]:
+    if not google_enabled():
+        raise HTTPException(404, "Google sign-in is not configured.")
+
+    def fail():
+        audit(db, request, "auth.google", "denied")
+        db.commit()
+        return "/login?error=google", None
+
+    if error or not state or not code:
+        return fail()
+
+    redis_client = get_redis()
+    state_key = f"oauth:{token_digest(state)}"
+    raw = redis_client.getdel(state_key)
+    if not raw:
+        return fail()
+
+    try:
+        stored = json.loads(raw)
+        verifier = stored["verifier"]
+        nonce = stored["nonce"]
+        target_next = stored.get("next", "/patients")
+    except Exception:
+        return fail()
+
+    settings = get_settings()
+    try:
+        token_resp = httpx.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret.get_secret_value(),
+                "redirect_uri": settings.google_redirect_uri,
+                "grant_type": "authorization_code",
+                "code_verifier": verifier,
+            },
+            timeout=10,
+        )
+        if token_resp.status_code != 200:
+            return fail()
+        token_data = token_resp.json()
+        id_token_raw = token_data.get("id_token")
+        if not id_token_raw:
+            return fail()
+    except Exception:
+        return fail()
+
+    try:
+        payload = verify_google_token(id_token_raw)
+    except Exception:
+        return fail()
+
+    if not payload or payload.get("nonce") != nonce:
+        return fail()
+
+    email_verified = payload.get("email_verified")
+    if not (email_verified is True or email_verified == "true"):
+        return fail()
+
+    sub = payload.get("sub")
+    email = payload.get("email")
+    if not sub:
+        return fail()
+
+    user = db.scalar(select(User).where(User.google_sub == sub))
+    if user is None:
+        if not email:
+            return fail()
+        user = db.scalar(
+            select(User).where(
+                User.email == email.lower(),
+                User.google_sub.is_(None),
+            )
+        )
+        if user is not None:
+            user.google_sub = sub
+
+    if user is None:
+        return fail()
+
+    if not user.active or not user.credentials_ready or user.password_reset_required:
+        return fail()
+
+    audit(db, request, "auth.google", "success", user.id)
+    db.commit()
+    return target_next, user.id

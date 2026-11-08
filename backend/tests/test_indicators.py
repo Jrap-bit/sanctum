@@ -59,6 +59,6 @@ def test_stale_review_and_audit_rollback(setup,monkeypatch):
  task(c,p)
  assert c.post(base+'/'+i['id']+'/review',json={'evaluationId':result['evaluationId'],'expectedVersion':1,'decision':'acknowledge'}).status_code==409
  def fail(*args):raise SQLAlchemyError('synthetic audit failure')
- monkeypatch.setattr(indicators_api,'record_audit',fail)
+ monkeypatch.setattr(indicators,'record_audit',fail)
  assert c.post(base+'/evaluate').status_code==503
  with factory() as db:assert len(db.scalars(select(IndicatorRun)).all())==1

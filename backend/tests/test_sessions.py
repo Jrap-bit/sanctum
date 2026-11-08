@@ -201,14 +201,14 @@ def test_revocation_and_deactivation_apply_to_existing_notes(setup):
 
 
 def test_audit_failure_rolls_back_finalization(setup, monkeypatch):
-    from app.api import sessions
+    from app.services import sessions as sessions_service
     client, _, _ = setup
     patient = create(client)
     note = saved(client, patient, new_note(client, patient), text="Keep as draft if audit fails")
     def broken_audit(*args):
         raise SQLAlchemyError("Synthetic audit failure")
     with monkeypatch.context() as local:
-        local.setattr(sessions, "record_audit", broken_audit)
+        local.setattr(sessions_service, "record_audit", broken_audit)
         assert client.post(url(patient, note) + "/finalize", json={"expectedVersion": note["version"]}).status_code == 503
     current = client.get(url(patient, note)).json()
     assert current["state"] == "draft" and current["version"] == note["version"]

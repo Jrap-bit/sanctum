@@ -1,7 +1,9 @@
 from hashlib import sha256
+from uuid import UUID
 from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.orm import aliased
 
 from ..adapters.crypto import decrypt
 from ..adapters.crypto import encrypt
@@ -11,10 +13,13 @@ from ..db.models import ClinicalNote
 from ..db.models import Report
 from ..db.models import now
 from .audit import record_audit
+from .authorization import require
+from .authorization import scoped_patient
 from .indicators import digest
 from .indicators import latest
 from .indicators import snapshot as indicator_snapshot
 from .summaries import current_note
+from .summaries import snapshot
 from .summaries import snapshot as session_snapshot
 from .summaries import sources_current
 
@@ -252,3 +257,39 @@ def export_pdf(db, user, request, patient, report_id) -> bytes:
     record_audit(db, request, user, "report.export", report.id)
     db.commit()
     return pdf
+
+
+def eligible_sources(db, user, request, patient_id: UUID):
+    require(user, "reports:write")
+    patient = scoped_patient(db, user, patient_id, clinical=True)
+    child = aliased(ClinicalNote)
+    rows = db.scalars(
+        select(ClinicalNote)
+        .where(
+            ClinicalNote.patient_id == patient.id,
+            ClinicalNote.state == "finalized",
+            ~select(child.id).where(child.parent_id == ClinicalNote.id, child.state == "finalized").exists(),
+        )
+        .order_by(ClinicalNote.created_at)
+    ).all()
+    items = [{k: v for k, v in snapshot(row).items() if k != "text"} for row in rows]
+    record_audit(db, request, user, "report.sources_read", patient.id)
+    db.commit()
+    return {"items": items}
+
+
+def preview(db, user, request, patient_id: UUID, body):
+    require(user, "reports:write")
+    patient = scoped_patient(db, user, patient_id, clinical=True)
+    source_versions = [s.model_dump() if hasattr(s, "model_dump") else s for s in body.sourceVersions]
+    manifest = create_preview(db, user, patient, source_versions)
+    record_audit(db, request, user, "report.preview", manifest["id"])
+    db.commit()
+    return manifest
+
+
+def export(db, user, request, patient_id: UUID, report_id: UUID) -> bytes:
+    require(user, "reports:write")
+    patient = scoped_patient(db, user, patient_id, clinical=True)
+    return export_pdf(db, user, request, patient, report_id)
+

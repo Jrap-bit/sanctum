@@ -1,0 +1,160 @@
+{
+  "run_date": "2026-11-08T19:35:49.753583+00:00",
+  "host_platform": "Darwin 27.2.0 (arm64)",
+  "python_version": "3.13.16",
+  "model_digests": {
+    "qwen3:4b": "359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7",
+    "qwen3:1.7b": "8f68893c685c3ddff2aa3fffce2aa60a30bb2da65ca488b61fff134a4d1730e7",
+    "llama3.2:3b": "a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72",
+    "gemma4:e2b": "45d11505b91d888e353859f5deeeeff3ffc9b3aa42263c00904120c53851ef96"
+  },
+  "ocr": {
+    "pages": [
+      {
+        "id": "ocr_page_1",
+        "variant": "large_clean",
+        "latency_seconds": 0.2277,
+        "raw_cer": 0.0133,
+        "norm_cer": 0.0133,
+        "raw_wer": 0.0339,
+        "norm_wer": 0.0339,
+        "success": true,
+        "error": null
+      },
+      {
+        "id": "ocr_page_2",
+        "variant": "large_clean",
+        "latency_seconds": 0.1817,
+        "raw_cer": 0.0047,
+        "norm_cer": 0.0047,
+        "raw_wer": 0.0169,
+        "norm_wer": 0.0169,
+        "success": true,
+        "error": null
+      },
+      {
+        "id": "ocr_page_3",
+        "variant": "large_clean",
+        "latency_seconds": 0.1821,
+        "raw_cer": 0.0,
+        "norm_cer": 0.0,
+        "raw_wer": 0.0,
+        "norm_wer": 0.0,
+        "success": true,
+        "error": null
+      },
+      {
+        "id": "ocr_page_4",
+        "variant": "noisy_rotated",
+        "latency_seconds": 0.2041,
+        "raw_cer": 0.0153,
+        "norm_cer": 0.0153,
+        "raw_wer": 0.1207,
+        "norm_wer": 0.1207,
+        "success": true,
+        "error": null
+      },
+      {
+        "id": "ocr_page_5",
+        "variant": "noisy_rotated",
+        "latency_seconds": 0.2028,
+        "raw_cer": 0.0092,
+        "norm_cer": 0.0092,
+        "raw_wer": 0.1071,
+        "norm_wer": 0.1071,
+        "success": true,
+        "error": null
+      },
+      {
+        "id": "ocr_page_6",
+        "variant": "small_font",
+        "latency_seconds": 0.1553,
+        "raw_cer": 0.0,
+        "norm_cer": 0.0,
+        "raw_wer": 0.0,
+        "norm_wer": 0.0,
+        "success": true,
+        "error": null
+      }
+    ],
+    "median": {
+      "median_latency_seconds": 0.1925,
+      "median_raw_cer": 0.0069,
+      "median_norm_cer": 0.0069,
+      "median_raw_wer": 0.0254,
+      "median_norm_wer": 0.0254,
+      "coverage": 1.0,
+      "total_pages": 6,
+      "successful_pages": 6
+    },
+    "handwritten": null
+  },
+  "llm": {
+    "qwen3:4b": {
+      "model": "qwen3:4b",
+      "latency_p50_seconds": 22.3384,
+      "latency_p95_seconds": 23.8163,
+      "success_rate": 1.0,
+      "required_phrase_recall": 1.0,
+      "forbidden_phrase_count": 0,
+      "facts_proposed": 26,
+      "failure_counts": {
+        "unsupported_evidence": 0,
+        "invalid_generation": 0,
+        "incomplete_generation": 0,
+        "model_unavailable": 0
+      }
+    },
+    "qwen3:1.7b": {
+      "model": "qwen3:1.7b",
+      "latency_p50_seconds": 11.9629,
+      "latency_p95_seconds": 14.0226,
+      "success_rate": 1.0,
+      "required_phrase_recall": 1.0,
+      "forbidden_phrase_count": 0,
+      "facts_proposed": 18,
+      "failure_counts": {
+        "unsupported_evidence": 0,
+        "invalid_generation": 0,
+        "incomplete_generation": 0,
+        "model_unavailable": 0
+      }
+    },
+    "llama3.2:3b": {
+      "model": "llama3.2:3b",
+      "latency_p50_seconds": 17.6778,
+      "latency_p95_seconds": 25.1732,
+      "success_rate": 1.0,
+      "required_phrase_recall": 0.8333,
+      "forbidden_phrase_count": 0,
+      "facts_proposed": 20,
+      "failure_counts": {
+        "unsupported_evidence": 0,
+        "invalid_generation": 0,
+        "incomplete_generation": 0,
+        "model_unavailable": 0
+      }
+    },
+    "gemma4:e2b": {
+      "model": "gemma4:e2b",
+      "latency_p50_seconds": 7.1333,
+      "latency_p95_seconds": 13.8488,
+      "success_rate": 1.0,
+      "required_phrase_recall": 0.7222,
+      "forbidden_phrase_count": 0,
+      "facts_proposed": 19,
+      "failure_counts": {
+        "unsupported_evidence": 0,
+        "invalid_generation": 0,
+        "incomplete_generation": 0,
+        "model_unavailable": 0
+      }
+    }
+  },
+  "limitations": {
+    "sample_size": "6 generated pages, 5 cases",
+    "handwriting_accuracy": "pages are typed and synthetic so handwriting accuracy (NFR-17) is not measured unless handwritten fixtures were supplied",
+    "proxy_targets": "NFR-16's 95%/85% targets are not established by this proxy; automated phrase proxy, not the two-annotator factual-support study in \u00a79.9",
+    "clinical_validity": "no result is a claim of clinical validity"
+  }
+}

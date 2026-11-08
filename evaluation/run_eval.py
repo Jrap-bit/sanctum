@@ -313,7 +313,9 @@ def run_llm_eval(
             sources = [source]
 
             required = case.get("required", [])
-            forbidden = case.get("forbidden", [])
+            # A phrase the note itself contains may be restated faithfully ("denies chest pain"),
+            # so only phrases absent from the source count as unsupported.
+            forbidden = [phrase for phrase in case.get("forbidden", []) if phrase.lower() not in text.lower()]
             total_required_count += len(required)
 
             t0 = time.perf_counter()
@@ -448,7 +450,7 @@ def generate_markdown_report(
         "",
         "## LLM Evaluation: Model Comparison",
         "",
-        "> Note: The phrase check is an automated phrase proxy, not the two-annotator factual-support study in §9.9.",
+        "> Note: The phrase check is an automated phrase proxy, not the two-annotator factual-support study in §9.9. Forbidden counts only phrases absent from the source note, so a correctly restated negation is not counted as an unsupported claim.",
         "",
         "| Model | Latency p50 (s) | Latency p95 (s) | Success Rate | Required Recall | Forbidden Count | Facts Proposed | Errors (unsupported / invalid / incomplete / unavailable) |",
         "|---|---|---|---|---|---|---|---|",

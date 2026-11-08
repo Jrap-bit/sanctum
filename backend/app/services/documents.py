@@ -2,22 +2,35 @@ from datetime import datetime
 from hashlib import sha256
 from io import BytesIO
 from pathlib import PurePosixPath
+from urllib.parse import quote
+from uuid import uuid4
 import warnings
+
 from PIL import Image
 from fastapi import HTTPException
+from fastapi import Response
 from pydantic import BaseModel
 from pypdf import PdfReader
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from uuid import uuid4
 
-from ..adapters.crypto import decrypt, decrypt_bytes, encrypt, encrypt_bytes
+from ..adapters.crypto import decrypt
+from ..adapters.crypto import decrypt_bytes
+from ..adapters.crypto import encrypt
+from ..adapters.crypto import encrypt_bytes
 from ..adapters.objectstore import get_store
 from ..core.exceptions import CiphertextIntegrityError
-from ..db.models import DocumentImport, ExtractionJob, Patient, PatientEvent, StoredDocument, User
+from ..db.models import DocumentImport
+from ..db.models import ExtractionJob
+from ..db.models import Patient
+from ..db.models import PatientEvent
+from ..db.models import StoredDocument
+from ..db.models import User
 from .audit import record_audit
 from .auth import user_from_request
-from .authorization import has_access, require, scoped_patient
+from .authorization import has_access
+from .authorization import require
+from .authorization import scoped_patient
 
 
 MAX_BYTES = 25 * 1024 * 1024
@@ -82,7 +95,8 @@ def output(db, row, user=None):
         pageCount=row.page_count,
         sizeBytes=row.size_bytes,
         mediaType=row.media_type,
-        jobState=state, jobId=job.id if job else None,
+        jobState=state,
+        jobId=job.id if job else None,
         progress=int(job.completed_pages * 100 / row.page_count) if job else 0,
         processingMessage=job.message if job else None,
         allowedActions=actions,
@@ -133,6 +147,14 @@ def validate_file(raw, filename, declared_type):
     return name, expected, pages
 
 
+def prepare_upload(db, user, patient_id):
+    require(user, "documents:write")
+    patient = scoped_patient(db, user, patient_id, clinical=True)
+    if patient.status != "active":
+        raise HTTPException(409, "Reactivate the patient before uploading documents.")
+    return patient
+
+
 def save_document(db, user, request, patient_id, raw, filename, content_type):
     user = user_from_request(request, db)
     require(user, "documents:write")
@@ -174,6 +196,45 @@ def save_document(db, user, request, patient_id, raw, filename, content_type):
         store.delete(key)
         raise
     return result
+
+
+def list_documents(db, user, request, patient_id):
+    patient = scoped_patient(db, user, patient_id, clinical=True)
+    rows = db.scalars(
+        select(StoredDocument)
+        .where(StoredDocument.patient_id == patient.id)
+        .order_by(StoredDocument.created_at.desc(), StoredDocument.id)
+    ).all()
+    result = {"items": [output(db, row, user=user) for row in rows]}
+    record_audit(db, request, user, "document.list", patient.id)
+    db.commit()
+    return result
+
+
+def download_document(db, user, request, patient_id, document_id):
+    patient = scoped_patient(db, user, patient_id, clinical=True)
+    row = db.scalar(
+        select(StoredDocument).where(
+            StoredDocument.id == str(document_id),
+            StoredDocument.patient_id == patient.id,
+        )
+    )
+    if row is None:
+        raise HTTPException(404, "Document unavailable.")
+    meta = output(db, row, user=user)
+    raw = original_bytes(row)
+    record_audit(db, request, user, "document.download", row.id)
+    db.commit()
+    return Response(
+        raw,
+        media_type=row.media_type,
+        headers={
+            "Content-Disposition": "attachment; filename*=UTF-8''" + quote(meta.filename, safe=""),
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 def original_bytes(row):

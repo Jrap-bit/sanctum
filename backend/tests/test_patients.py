@@ -216,7 +216,7 @@ def test_database_rejects_two_writers_using_the_same_version(setup):
 
 def test_audit_failure_rolls_back_patient_creation(setup, monkeypatch):
     from sqlalchemy.exc import SQLAlchemyError
-    from app.api import patients
+    from app.services import patients
     client, factory, _ = setup
     def unavailable(*args):
         raise SQLAlchemyError("Synthetic audit outage")

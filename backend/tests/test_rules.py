@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from app.api import rules
+from app.services import rules
 from app.manage import create_user
 from app.db.models import RuleRevision,RuleHead
 from app.domain.rules.dt02_rating_increase import rating_results

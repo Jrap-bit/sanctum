@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from app.adapters.crypto import decrypt
 from app.workers import extraction as worker
-from app.api import review
+from app.services import review
 from app.db.models import ClinicalNote, DocumentImport, ExtractedPage, StoredDocument
 from app.services.patients import clinic_today
 from test_patients import setup, create, path, sign_in
