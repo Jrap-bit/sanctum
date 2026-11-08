@@ -19,7 +19,6 @@ class Settings(BaseSettings):
     reset_token_minutes: int = Field(default=30, ge=5, le=120)
     tesseract_command: str = "tesseract"
     ocr_language: str = "eng"
-    ollama_url: str = "http://127.0.0.1:11434"
     summary_model: str = "qwen3:4b"
     # Runtime is a URL: host Ollama, Docker Model Runner, or the containerised CPU profile.
     llm_engine: str = "ollama"
@@ -63,7 +62,6 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=10, ge=0, le=50)
     db_pool_recycle_seconds: int = Field(default=1800, ge=60, le=86400)
     clinic_timezone: str = "Asia/Kolkata"
-    encryption_key_path: Path = Path(__file__).resolve().parents[2] / "secrets" / "clinical.key"
 
 
 @lru_cache

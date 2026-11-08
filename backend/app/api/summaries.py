@@ -15,6 +15,8 @@ import json
 from ..adapters import llm as ai
 from ..adapters.crypto import decrypt
 from ..adapters.crypto import encrypt
+from ..core.cache import publish_progress
+from ..core.config import get_settings
 from ..db.models import AISummary
 from ..db.models import ClinicalNote
 from ..db.models import SummaryJob
@@ -52,9 +54,12 @@ class CreateSummary(Input):
     kind: Literal['single_session','longitudinal']
     sourceVersions: list[SourceVersion] = Field(min_length=1,max_length=30)
     requestKey: UUID
+    model: str | None = None
 
     @model_validator(mode='after')
     def valid(self):
+        if self.model is not None and self.model not in get_settings().llm_models:
+            raise ValueError('Unknown model.')
         if self.kind=='single_session' and len(self.sourceVersions)!=1:raise ValueError('Choose one source for a single-session summary.')
         if len({s.id for s in self.sourceVersions})!=len(self.sourceVersions):raise ValueError('Choose each source once.')
         return self
@@ -84,9 +89,9 @@ class FactReview(VersionInput):
 
 
 @router.get('/api/v1/ai/status')
-def model_status(user:CurrentUser):
+def model_status(user:CurrentUser, model: str | None = None):
     if not {'summaries:write','operations:manage'}&set(user.capabilities):raise HTTPException(403,'This action is outside your permissions.')
-    return ai.status()
+    return ai.status(model)
 
 
 @router.get(PREFIX+'/eligible-sources')
@@ -104,7 +109,7 @@ def eligible(patient_id:UUID,user:CurrentUser,db:Db,request:Request):
 def create(patient_id:UUID,data:CreateSummary,user:CurrentUser,db:Db,request:Request):
     require(user,'summaries:write');patient=scoped_patient(db,user,patient_id,clinical=True,lock=True)
     if patient.status!='active':raise HTTPException(409,'Reactivate the patient before generating summaries.')
-    canonical={'kind':data.kind,'sources':sorted([s.model_dump(mode='json') for s in data.sourceVersions],key=lambda s:s['id'])}
+    canonical={'kind':data.kind,'model':data.model,'sources':sorted([s.model_dump(mode='json') for s in data.sourceVersions],key=lambda s:s['id'])}
     fingerprint=sha256(json.dumps(canonical,sort_keys=True).encode()).hexdigest()
     old=db.scalar(select(SummaryJob).where(SummaryJob.requested_by==user.id,SummaryJob.request_key==str(data.requestKey)))
     if old:
@@ -119,7 +124,8 @@ def create(patient_id:UUID,data:CreateSummary,user:CurrentUser,db:Db,request:Req
     try:ai.check_size(sources,data.kind)
     except ValueError:raise HTTPException(422,'The selected records exceed the local model input limit. Choose fewer or shorter sources; nothing was truncated.') from None
     jid=str(uuid4())
-    job=SummaryJob(id=jid,patient_id=patient.id,requested_by=user.id,request_key=str(data.requestKey),request_hash=fingerprint,kind=data.kind,
+    job=SummaryJob(id=jid,patient_id=patient.id,requested_by=user.id,request_key=str(data.requestKey),request_hash=fingerprint,
+                   model=data.model,kind=data.kind,
                    payload=encrypt({'sources':sources},f'summary-job:{patient.id}:{jid}'),state='queued')
     db.add(job);record_audit(db,request,user,'summary.generation_requested',jid);db.flush();result=job_output(job);db.commit();return result
 
@@ -179,7 +185,9 @@ def cancel_job(job_id:UUID,user:CurrentUser,db:Db,request:Request):
     job=scoped_job(db,user,job_id,True)
     if job.state not in {'queued','running'}:raise HTTPException(409,'This job is no longer active.')
     job.state='cancelled';job.run_id=None;job.lease_until=None
-    record_audit(db,request,user,'summary.generation_cancelled',job.id);result=job_output(job);db.commit();return result
+    record_audit(db,request,user,'summary.generation_cancelled',job.id);result=job_output(job);db.commit()
+    publish_progress(job.id, state='cancelled', message=job.message)
+    return result
 
 
 @router.post('/api/v1/jobs/{job_id}/retry',status_code=202)

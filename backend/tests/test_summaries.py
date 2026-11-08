@@ -4,7 +4,7 @@ from sqlalchemy import select
 from app.adapters import llm as ai
 from app.workers import summary as summary_worker
 from app.db.models import AISummary, SummaryJob
-from test_patients import setup, create, path, sign_in
+from test_patients import setup, create, path, sign_in, PASSWORD
 from test_sessions import new_note, saved, finalized, url
 
 TEXT='The patient denied alcohol use.'
@@ -14,10 +14,21 @@ def prepare(c):
     body={'kind':'single_session','sourceVersions':[{'id':n['id'],'version':n['version'],'type':'session'}],'requestKey':str(uuid4())}
     return p,n,body
 
-def generate(sources,kind):
-    result=ai.Generated.model_validate({'summary':[{'text':TEXT,'evidence':[{'sourceId':'S1','quote':TEXT}]}],
-      'facts':[{'text':TEXT,'label':'concern','assertion':'denied','temporality':'current','subject':'patient','evidence':[{'sourceId':'S1','quote':TEXT}]}]})
-    return {**ai.grounded(result,sources),'model':'synthetic','modelDigest':'test','promptVersion':'test'}
+def generate(sources, kind, model=None, on_delta=None):
+    if on_delta:
+        on_delta(TEXT)
+    result = ai.Generated.model_validate({
+        'summary': [{'text': TEXT, 'evidence': [{'sourceId': 'S1', 'quote': TEXT}]}],
+        'facts': [{
+            'text': TEXT,
+            'label': 'concern',
+            'assertion': 'denied',
+            'temporality': 'current',
+            'subject': 'patient',
+            'evidence': [{'sourceId': 'S1', 'quote': TEXT}],
+        }],
+    })
+    return {**ai.grounded(result, sources), 'model': model or 'synthetic', 'modelDigest': 'test', 'promptVersion': 'test'}
 
 def draft(c,factory):
     p,n,body=prepare(c);base=path(p)+'/summaries'
@@ -60,9 +71,9 @@ def test_amendment_invalidates_and_filters_sources(setup):
 def test_cancel_during_generation_and_retry(setup):
     c,factory,_=setup;p,n,body=prepare(c)
     j=c.post(path(p)+'/summaries',json=body).json();endpoint='/api/v1/jobs/'+j['id']
-    def cancel(sources,kind):
+    def cancel(sources, kind, *args, **kwargs):
         assert c.post(endpoint+'/cancel').status_code==200
-        return generate(sources,kind)
+        return generate(sources, kind, *args, **kwargs)
     summary_worker.run_once(factory,cancel)
     assert c.get(endpoint).json()['state']=='cancelled'
     with factory() as db:assert db.scalar(select(AISummary)) is None
@@ -135,3 +146,94 @@ def test_conservative_category_checks(text,label,expected):
     fact=ai.grounded(result,[source])['facts'][0]
     assert fact['label']==expected
     if label!=expected:assert fact['modelProposedLabel']==label and fact['reviewNote']
+
+
+def test_unknown_model_gives_422(setup):
+    c, factory, _ = setup
+    p, n, body = prepare(c)
+    base = path(p) + '/summaries'
+    response = c.post(base, json={**body, 'model': 'unsupported_model_123'})
+    assert response.status_code == 422
+
+
+def test_chosen_model_stored_passed_and_recorded(setup):
+    c, factory, _ = setup
+    p, n, body = prepare(c)
+    base = path(p) + '/summaries'
+    target_model = 'qwen3:1.7b'
+    response = c.post(base, json={**body, 'model': target_model})
+    assert response.status_code == 202
+    job_id = response.json()['id']
+    with factory() as db:
+        job = db.scalar(select(SummaryJob).where(SummaryJob.id == job_id))
+        assert job.model == target_model
+
+    passed_model = []
+    def recording_gen(sources, kind, model=None, on_delta=None):
+        passed_model.append(model)
+        return generate(sources, kind, model, on_delta)
+
+    summary_worker.run_once(factory, recording_gen)
+    assert passed_model == [target_model]
+
+    j = c.get('/api/v1/jobs/' + job_id).json()
+    assert j['state'] == 'completed'
+    s = c.get(base + '/' + j['resultId']).json()
+    assert s['model'] == target_model
+
+
+def test_model_catalog_permissions_and_status(setup, monkeypatch):
+    c, factory, ids = setup
+    # Default user has summaries:write -> 200
+    r = c.get('/api/v1/models')
+    assert r.status_code == 200
+    data = r.json()
+    assert 'default' in data and 'items' in data
+    assert any(m['id'] == 'qwen3:4b' for m in data['items'])
+
+    # User admin has operations:manage -> 200
+    sign_in(c, 'admin')
+    r_op = c.get('/api/v1/models')
+    assert r_op.status_code == 200
+
+    # User reviewer (oversight, neither summaries:write nor operations:manage) -> 403
+    from app.manage import create_user
+    with factory() as db:
+        create_user(db, 'reviewer', 'Reviewer', 'oversight', PASSWORD)
+    sign_in(c, 'reviewer')
+    assert c.get('/api/v1/models').status_code == 403
+    assert c.get('/api/v1/ai/status').status_code == 403
+
+    # With runtime down, returns items with available: false, not an error
+    sign_in(c, 'alice')
+    def mock_models_fail():
+        raise ValueError('model_unavailable')
+    monkeypatch.setattr(ai.engine(), 'models', mock_models_fail)
+    r_down = c.get('/api/v1/models')
+    assert r_down.status_code == 200
+    assert all(item['available'] is False for item in r_down.json()['items'])
+
+
+def test_progress_publish_happens(setup, monkeypatch):
+    c, factory, _ = setup
+    p, n, body = prepare(c)
+    base = path(p) + '/summaries'
+    r = c.post(base, json=body)
+    assert r.status_code == 202
+    events = []
+    from app.workers import summary as sw
+    orig_publish = sw.publish_progress
+    def record_progress(job_id, **kwargs):
+        events.append((job_id, kwargs))
+        orig_publish(job_id, **kwargs)
+    monkeypatch.setattr(sw, 'publish_progress', record_progress)
+
+    sw.run_once(factory, generate)
+    stages = [kwargs.get('stage') for _, kwargs in events if 'stage' in kwargs]
+    assert 'Waiting for the model' in stages
+    assert 'Writing draft' in stages
+    deltas = [kwargs.get('delta') for _, kwargs in events if kwargs.get('delta')]
+    assert len(deltas) > 0 and TEXT in deltas[0]
+    states = [kwargs.get('state') for _, kwargs in events]
+    assert 'completed' in states
+

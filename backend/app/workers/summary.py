@@ -8,6 +8,7 @@ import time
 from ..adapters import llm as ai
 from ..adapters.crypto import decrypt
 from ..adapters.crypto import encrypt
+from ..core.cache import publish_progress
 from ..core.database import SessionLocal
 from ..db.models import AISummary
 from ..db.models import AuditEvent
@@ -19,99 +20,213 @@ from ..services.authorization import has_access
 from ..services.summaries import sources_current
 
 
-ERRORS={
-    'model_unavailable':'The configured local model is unavailable. Start Ollama and check the installed model, then retry.',
-    'unsupported_evidence':'The model returned a quotation that could not be verified. No draft was saved; retry generation.',
-    'source_limit':'The selected records exceed the local model input limit. Create a smaller source selection.',
-    'incomplete_generation':'The model stopped before finishing its draft. Retry with fewer sources.',
+ERRORS = {
+    'model_unavailable': 'The configured local model is unavailable. Start Ollama and check the installed model, then retry.',
+    'unsupported_evidence': 'The model returned a quotation that could not be verified. No draft was saved; retry generation.',
+    'source_limit': 'The selected records exceed the local model input limit. Create a smaller source selection.',
+    'incomplete_generation': 'The model stopped before finishing its draft. Retry with fewer sources.',
 }
 
 
-def authorised(db,job):
-    user=db.get(User,job.requested_by);patient=db.get(Patient,job.patient_id)
-    return bool(user and user.active and user.credentials_ready and not user.password_reset_required
-        and {'clinical:read','summaries:write'}<=set(user.capabilities) and patient and patient.status=='active'
-        and has_access(db,user,patient.id,write=True))
+def authorised(db, job):
+    user = db.get(User, job.requested_by)
+    patient = db.get(Patient, job.patient_id)
+    return bool(
+        user
+        and user.active
+        and user.credentials_ready
+        and not user.password_reset_required
+        and {'clinical:read', 'summaries:write'} <= set(user.capabilities)
+        and patient
+        and patient.status == 'active'
+        and has_access(db, user, patient.id, write=True)
+    )
 
 
-def audit(db,job,action,outcome='success'):
-    db.add(AuditEvent(actor_id=job.requested_by,target_id=job.id,action=action,outcome=outcome,request_id=job.run_id or str(uuid4())))
+def audit(db, job, action, outcome='success'):
+    db.add(
+        AuditEvent(
+            actor_id=job.requested_by,
+            target_id=job.id,
+            action=action,
+            outcome=outcome,
+            request_id=job.run_id or str(uuid4()),
+        )
+    )
 
 
 def claim(factory):
     with factory() as db:
-        job=db.scalar(select(SummaryJob).where(or_(SummaryJob.state=='queued',(SummaryJob.state=='running')&(SummaryJob.lease_until<now())))
-            .order_by(SummaryJob.created_at).with_for_update(skip_locked=True).limit(1))
-        if job is None:return None
-        sources=decrypt(job.payload,f'summary-job:{job.patient_id}:{job.id}')['sources']
-        if not authorised(db,job) or not sources_current(db,job.patient_id,sources):
-            job.state='cancelled';job.message='Generation cancelled because access or selected source records changed.';job.run_id=None;job.lease_until=None
-            audit(db,job,'summary.generation_cancelled');db.commit();return ()
-        if job.attempts>=3:
-            job.state='failed';job.message='Generation was interrupted repeatedly. Check the worker and retry.';job.lease_until=None
-            audit(db,job,'summary.generation_failed','failure');db.commit();return ()
-        job.state='running';job.attempts+=1;job.run_id=str(uuid4());job.lease_until=now()+timedelta(seconds=360);job.message=None
-        ticket=(job.id,job.run_id,job.patient_id,job.kind,sources)
-        audit(db,job,'summary.generation_started');db.commit();return ticket
+        job = db.scalar(
+            select(SummaryJob)
+            .where(or_(SummaryJob.state == 'queued', (SummaryJob.state == 'running') & (SummaryJob.lease_until < now())))
+            .order_by(SummaryJob.created_at)
+            .with_for_update(skip_locked=True)
+            .limit(1)
+        )
+        if job is None:
+            return None
+        sources = decrypt(job.payload, f'summary-job:{job.patient_id}:{job.id}')['sources']
+        if not authorised(db, job) or not sources_current(db, job.patient_id, sources):
+            job.state = 'cancelled'
+            job.message = 'Generation cancelled because access or selected source records changed.'
+            job.run_id = None
+            job.lease_until = None
+            audit(db, job, 'summary.generation_cancelled')
+            db.commit()
+            publish_progress(job.id, state='cancelled', message=job.message)
+            return ()
+        if job.attempts >= 3:
+            job.state = 'failed'
+            job.message = 'Generation was interrupted repeatedly. Check the worker and retry.'
+            job.lease_until = None
+            audit(db, job, 'summary.generation_failed', 'failure')
+            db.commit()
+            publish_progress(job.id, state='failed', message=job.message)
+            return ()
+        job.state = 'running'
+        job.attempts += 1
+        job.run_id = str(uuid4())
+        job.lease_until = now() + timedelta(seconds=360)
+        job.message = None
+        ticket = (job.id, job.run_id, job.patient_id, job.kind, sources, job.model)
+        audit(db, job, 'summary.generation_started')
+        db.commit()
+        return ticket
 
 
-def locked_current(db,jid,run_id,patient_id):
-    # Same patient → job lock order as cancellation/retry endpoints.
-    db.scalar(select(Patient).where(Patient.id==patient_id).with_for_update())
-    job=db.scalar(select(SummaryJob).where(SummaryJob.id==jid).with_for_update())
-    return job if job and job.state=='running' and job.run_id==run_id else None
+def locked_current(db, jid, run_id, patient_id):
+    # Same patient -> job lock order as cancellation/retry endpoints.
+    db.scalar(select(Patient).where(Patient.id == patient_id).with_for_update())
+    job = db.scalar(select(SummaryJob).where(SummaryJob.id == jid).with_for_update())
+    return job if job and job.state == 'running' and job.run_id == run_id else None
 
 
-def run_once(factory=SessionLocal,generator=ai.generate):
-    ticket=claim(factory)
-    if ticket is None:return False
-    if not ticket:return True
-    jid,run_id,patient_id,kind,sources=ticket
+def run_once(factory=SessionLocal, generator=ai.generate):
+    ticket = claim(factory)
+    if ticket is None:
+        return False
+    if not ticket:
+        return True
+    jid, run_id, patient_id, kind, sources, model = ticket
+
+    publish_progress(jid, state='running', progress=0, stage='Waiting for the model')
+
+    batch_chunks = []
+    last_publish = 0.0
+
+    def on_delta(delta: str):
+        nonlocal last_publish
+        batch_chunks.append(delta)
+        now_time = time.monotonic()
+        if now_time - last_publish >= 0.150:
+            batch = "".join(batch_chunks)
+            batch_chunks.clear()
+            last_publish = now_time
+            publish_progress(jid, state='running', stage='Writing draft', delta=batch)
+
     try:
-        generated=generator(sources,kind)
+        try:
+            generated = generator(sources, kind, model, on_delta)
+        except TypeError:
+            generated = generator(sources, kind)
+
+        if batch_chunks:
+            batch = "".join(batch_chunks)
+            batch_chunks.clear()
+            publish_progress(jid, state='running', stage='Writing draft', delta=batch)
+
         with factory() as db:
-            job=locked_current(db,jid,run_id,patient_id)
-            if job is None:return True
-            if not authorised(db,job) or not sources_current(db,patient_id,sources):
-                job.state='cancelled';job.message='Generation cancelled because access or selected source records changed.';job.lease_until=None
-                audit(db,job,'summary.generation_cancelled');db.commit();return True
-            source_indices={s['id']:i+1 for i,s in enumerate(sources)}
-            text='\n\n'.join(p['text']+' '+''.join(f"[{source_indices[sid]}]" for sid in dict.fromkeys(e['sourceId'] for e in p['evidence'])) for p in generated['paragraphs'])
-            evidence=[]
+            job = locked_current(db, jid, run_id, patient_id)
+            if job is None:
+                return True
+            if not authorised(db, job) or not sources_current(db, patient_id, sources):
+                job.state = 'cancelled'
+                job.message = 'Generation cancelled because access or selected source records changed.'
+                job.lease_until = None
+                audit(db, job, 'summary.generation_cancelled')
+                db.commit()
+                publish_progress(jid, state='cancelled', message=job.message)
+                return True
+
+            source_indices = {s['id']: i + 1 for i, s in enumerate(sources)}
+            text = '\n\n'.join(
+                p['text'] + ' ' + ''.join(f"[{source_indices[sid]}]" for sid in dict.fromkeys(e['sourceId'] for e in p['evidence']))
+                for p in generated['paragraphs']
+            )
+            evidence = []
             for p in generated['paragraphs']:
                 for e in p['evidence']:
-                    if e not in evidence:evidence.append(e)
-            facts=[{**f,'id':str(uuid4()),'state':'pending','originalFact':f.copy()} for f in generated['facts']]
-            payload={'text':text,'originalText':text,'reviewState':'pending','sources':sources,'evidence':evidence,
-                'facts':facts,'reviewHistory':[],'model':generated['model'],'modelDigest':generated['modelDigest'],
-                'promptVersion':generated['promptVersion'],'originalParagraphs':generated['paragraphs']}
-            sid=str(uuid4());db.add(AISummary(id=sid,patient_id=patient_id,created_by=job.requested_by,kind=kind,
-                version=1,payload=encrypt(payload,f'summary:{patient_id}:{sid}')))
+                    if e not in evidence:
+                        evidence.append(e)
+            facts = [{**f, 'id': str(uuid4()), 'state': 'pending', 'originalFact': f.copy()} for f in generated['facts']]
+            payload = {
+                'text': text,
+                'originalText': text,
+                'reviewState': 'pending',
+                'sources': sources,
+                'evidence': evidence,
+                'facts': facts,
+                'reviewHistory': [],
+                'model': generated['model'],
+                'modelDigest': generated['modelDigest'],
+                'promptVersion': generated['promptVersion'],
+                'originalParagraphs': generated['paragraphs'],
+            }
+            sid = str(uuid4())
+            db.add(
+                AISummary(
+                    id=sid,
+                    patient_id=patient_id,
+                    created_by=job.requested_by,
+                    kind=kind,
+                    version=1,
+                    payload=encrypt(payload, f'summary:{patient_id}:{sid}'),
+                )
+            )
             db.flush()
-            job.state='completed';job.summary_id=sid;job.lease_until=None
-            audit(db,job,'summary.generation_completed');db.commit()
+            job.state = 'completed'
+            job.summary_id = sid
+            job.lease_until = None
+            audit(db, job, 'summary.generation_completed')
+            db.commit()
+            publish_progress(jid, state='completed', progress=100, message=job.message)
     except Exception as exc:
         with factory() as db:
-            job=locked_current(db,jid,run_id,patient_id)
+            job = locked_current(db, jid, run_id, patient_id)
             if job:
-                job.state='failed';job.lease_until=None
-                job.message=ERRORS.get(str(exc),'Generation failed or returned invalid structured output. No draft was saved; retry or use fewer sources.')
-                audit(db,job,'summary.generation_failed','failure');db.commit()
+                job.state = 'failed'
+                job.lease_until = None
+                job.message = ERRORS.get(
+                    str(exc),
+                    'Generation failed or returned invalid structured output. No draft was saved; retry or use fewer sources.',
+                )
+                audit(db, job, 'summary.generation_failed', 'failure')
+                db.commit()
+                publish_progress(jid, state='failed', message=job.message)
     return True
 
 
 def main():
     import argparse
-    parser=argparse.ArgumentParser(description='Process local AI summary jobs');parser.add_argument('--once',action='store_true');args=parser.parse_args()
-    if args.once:run_once();return
-    print('Local AI summary worker started. Press Ctrl+C to stop.',flush=True)
+    parser = argparse.ArgumentParser(description='Process local AI summary jobs')
+    parser.add_argument('--once', action='store_true')
+    args = parser.parse_args()
+    if args.once:
+        run_once()
+        return
+    print('Local AI summary worker started. Press Ctrl+C to stop.', flush=True)
     try:
         while True:
             try:
-                if not run_once():time.sleep(2)
+                if not run_once():
+                    time.sleep(2)
             except Exception:
-                print('Summary worker could not access its queue. Retrying.',flush=True);time.sleep(5)
-    except KeyboardInterrupt:print('Summary worker stopped. Interrupted jobs recover after lease expiry.',flush=True)
+                print('Summary worker could not access its queue. Retrying.', flush=True)
+                time.sleep(5)
+    except KeyboardInterrupt:
+        print('Summary worker stopped. Interrupted jobs recover after lease expiry.', flush=True)
 
 
-if __name__=='__main__':main()
+if __name__ == '__main__':
+    main()

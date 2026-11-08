@@ -11,9 +11,10 @@ from ..core.security import passwords
 from ..core.security import token_digest
 from ..db.models import AuditEvent
 from ..db.models import CredentialToken
-from ..db.models import LoginSession
 from ..db.models import User
 from ..db.models import now
+from .session_store import delete_user_sessions
+from .session_store import read_session
 
 
 def account_audit(db, request, action, outcome="success", *, actor_id=None, target_id=None):
@@ -23,7 +24,7 @@ def account_audit(db, request, action, outcome="success", *, actor_id=None, targ
 
 def invalidate_credentials(db, user_id):
     """Call while holding the user row lock; old sessions/links must not come back."""
-    db.execute(delete(LoginSession).where(LoginSession.user_id == user_id))
+    delete_user_sessions(user_id)
     db.execute(delete(CredentialToken).where(CredentialToken.user_id == user_id))
 
 
@@ -70,7 +71,7 @@ def redeem_credential_link(db, request, raw, password):
     user.password_reset_required = False
     user.active = True
     token.consumed_at = now()
-    db.execute(delete(LoginSession).where(LoginSession.user_id == user.id))
+    delete_user_sessions(user.id)
     account_audit(db, request, "credential." + token.purpose, actor_id=user.id, target_id=user.id)
     db.commit()
     return {"success": True}
@@ -84,10 +85,7 @@ def administrator(db, actor, request, target_id=None):
     current = users.get(actor.id)
     if current is None or not current.active or not current.credentials_ready or current.password_reset_required:
         raise HTTPException(401, "Sign in to continue.")
-    live_session = db.scalar(select(LoginSession.token_hash).where(
-        LoginSession.token_hash == token_digest(request.cookies.get(COOKIE_NAME, "")),
-        LoginSession.user_id == current.id, LoginSession.expires_at > now()))
-    if live_session is None:
+    if read_session(request.cookies.get(COOKIE_NAME, "")) != current.id:
         raise HTTPException(401, "Sign in to continue.")
     if "users:manage" not in current.capabilities:
         account_audit(db, request, "user.manage", "denied", actor_id=current.id)

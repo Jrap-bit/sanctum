@@ -43,8 +43,11 @@ def login(c, username, password=PASSWORD):
 def post(c, path, body=None):
     return c.post(path, headers=ORIGIN, json=body or {})
 
-def invite(c):
-    response = post(c, ROOT, {'username': ' New.Staff ', 'displayName': 'New Staff', 'capabilities': ['patients:read', 'clinical:write']})
+def invite(c, email=None):
+    payload = {'username': ' New.Staff ', 'displayName': 'New Staff', 'capabilities': ['patients:read', 'clinical:write']}
+    if email is not None:
+        payload['email'] = email
+    response = post(c, ROOT, payload)
     assert response.status_code == 201, response.text
     data = response.json()
     return data['user']['id'], parse_qs(urlparse(data['credentialAction']['url']).query)['token'][0]
@@ -136,3 +139,50 @@ def test_activation_rate_limit(setup):
     for _ in range(30):
         assert redeem(c, 'unknown').status_code == 400
     assert redeem(c, 'unknown').status_code == 429
+
+def test_create_account_email_validation_and_uniqueness(setup):
+    c, factory, _ = setup
+    # Valid email lowercased and saved
+    res = post(c, ROOT, {
+        'username': 'doc.smith',
+        'displayName': 'Doc Smith',
+        'capabilities': ['patients:read'],
+        'email': ' Doc.Smith@Example.Com '
+    })
+    assert res.status_code == 201
+    data = res.json()
+    assert data['user']['email'] == 'doc.smith@example.com'
+
+    # AdminUserOutput includes email
+    items = c.get(ROOT).json()['items']
+    smith = next(u for u in items if u['username'] == 'doc.smith')
+    assert smith['email'] == 'doc.smith@example.com'
+
+    # Duplicate email returns 409
+    dup_res = post(c, ROOT, {
+        'username': 'other.smith',
+        'displayName': 'Other Smith',
+        'capabilities': ['patients:read'],
+        'email': 'doc.smith@example.com'
+    })
+    assert dup_res.status_code == 409
+
+    # Invalid email formats return 422
+    for bad_email in ['not-an-email', '@missinguser.com', 'user@', 'user@domain']:
+        bad_res = post(c, ROOT, {
+            'username': 'bad.user',
+            'displayName': 'Bad User',
+            'capabilities': ['patients:read'],
+            'email': bad_email
+        })
+        assert bad_res.status_code == 422
+
+def test_manage_create_user_with_email(setup):
+    _, factory, _ = setup
+    with factory() as db:
+        user = create_user(db, 'operator', 'Operator User', 'clinician', PASSWORD, email=' Operator@example.com ')
+        assert user.email == 'operator@example.com'
+    with pytest.raises(ValueError):
+        with factory() as db:
+            create_user(db, 'bad_operator', 'Bad Operator', 'clinician', PASSWORD, email='invalid-email')
+

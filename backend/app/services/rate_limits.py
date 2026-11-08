@@ -1,32 +1,38 @@
-"""Persistent fixed-window limits shared across API processes."""
-from datetime import datetime
-from datetime import timezone
-from sqlalchemy import delete
-from sqlalchemy import update
-from sqlalchemy.exc import IntegrityError
-
+"""Redis-backed rate limiting and progressive delays. No database use."""
+from ..core.cache import get_redis
 from ..core.security import token_digest
-from ..db.models import LoginBucket
-from ..db.models import now
 
 
-def consume_limits(db, buckets):
-    current = now()
-    window = int(current.timestamp()) // 900
-    expires = datetime.fromtimestamp((window + 1) * 900, timezone.utc)
-    db.execute(delete(LoginBucket).where(LoginBucket.expires_at <= current))
-    permitted = True
-    for scope, value, limit in buckets:
-        key = token_digest(f"{scope}:{value}:{window}")
-        try:
-            with db.begin_nested():
-                db.add(LoginBucket(key=key, attempts=0, expires_at=expires))
-                db.flush()
-        except IntegrityError:
-            pass
-        count = db.execute(update(LoginBucket).where(LoginBucket.key == key)
-                           .values(attempts=LoginBucket.attempts + 1)
-                           .returning(LoginBucket.attempts)).scalar_one()
-        permitted = permitted and count <= limit
-    db.commit()
-    return permitted
+def retry_after(scope: str, value: str, threshold: int = 5) -> int:
+    client = get_redis()
+    digest = token_digest(f"{scope}:{value}")
+    ttl = client.ttl(f"rl:block:{digest}")
+    return max(0, ttl) if ttl and ttl > 0 else 0
+
+
+def record_failure(scope: str, value: str, threshold: int = 5) -> None:
+    client = get_redis()
+    digest = token_digest(f"{scope}:{value}")
+    key = f"rl:failures:{digest}"
+    count = client.incr(key)
+    if count == 1 or client.ttl(key) == -1:
+        client.expire(key, 900)
+    if count >= threshold:
+        delay = min(2 ** (count - threshold), 900)
+        client.set(f"rl:block:{digest}", "1", ex=delay)
+
+
+def clear_failures(scope: str, value: str) -> None:
+    client = get_redis()
+    digest = token_digest(f"{scope}:{value}")
+    client.delete(f"rl:failures:{digest}", f"rl:block:{digest}")
+
+
+def consume(scope: str, value: str, limit: int, window_seconds: int = 900) -> bool:
+    client = get_redis()
+    digest = token_digest(f"{scope}:{value}")
+    key = f"rl:counter:{digest}"
+    count = client.incr(key)
+    if count == 1 or client.ttl(key) == -1:
+        client.expire(key, window_seconds)
+    return count <= limit

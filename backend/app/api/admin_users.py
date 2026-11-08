@@ -35,6 +35,7 @@ class CreateAccount(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     displayName: str = Field(min_length=1, max_length=160)
     capabilities: list[str] = Field(min_length=1, max_length=17)
+    email: str | None = Field(default=None, max_length=254)
 
     @field_validator("username")
     @classmethod
@@ -59,11 +60,22 @@ class CreateAccount(BaseModel):
             raise ValueError("Choose permissions within one supported role preset. Mixed roles and patient deletion grants require separate approval.")
         return sorted(chosen)
 
+    @field_validator("email")
+    @classmethod
+    def email_valid(cls, value):
+        if value is None:
+            return None
+        value = value.strip().lower()
+        if len(value) > 254 or not re.fullmatch(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", value):
+            raise ValueError("Enter a valid email address.")
+        return value
+
 
 class AdminUserOutput(UserOutput):
     active: bool
     credentialsReady: bool
     resetRequired: bool
+    email: str | None = None
 
 
 class CredentialAction(BaseModel):
@@ -78,8 +90,13 @@ class AccountResult(BaseModel):
 
 
 def account_output(user):
-    return AdminUserOutput(**public_user(user).model_dump(), active=user.active,
-                           credentialsReady=user.credentials_ready, resetRequired=user.password_reset_required)
+    return AdminUserOutput(
+        **public_user(user).model_dump(),
+        active=user.active,
+        credentialsReady=user.credentials_ready,
+        resetRequired=user.password_reset_required,
+        email=user.email,
+    )
 
 
 @router.get("", response_model=dict[str, list[AdminUserOutput]])
@@ -97,14 +114,22 @@ def list_users(user: CurrentUser, db: Db, request: Request, active: bool | None 
 @router.post("", response_model=AccountResult, status_code=201)
 def create_account(data: CreateAccount, user: CurrentUser, db: Db, request: Request):
     administrator(db, user, request)
-    target = User(username=data.username, display_name=data.displayName,
-                  capabilities=data.capabilities, active=False, credentials_ready=False,
-                  password_hash=passwords.hash(secrets.token_urlsafe(32)))
+    target = User(
+        username=data.username,
+        display_name=data.displayName,
+        capabilities=data.capabilities,
+        email=data.email,
+        active=False,
+        credentials_ready=False,
+        password_hash=passwords.hash(secrets.token_urlsafe(32)),
+    )
     db.add(target)
     try:
         db.flush()
     except IntegrityError:
         db.rollback()
+        if data.email and db.scalar(select(User).where(User.email == data.email)):
+            raise HTTPException(409, "That email already exists.")
         raise HTTPException(409, "That username already exists.") from None
     action = issue_credential_link(db, target, user.id, "activation")
     account_audit(db, request, "user.create", actor_id=user.id, target_id=target.id)

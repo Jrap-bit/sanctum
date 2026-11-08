@@ -4,11 +4,12 @@ from pydantic import ConfigDict
 from pydantic import Field
 from typing import Literal
 from urllib.parse import urlparse
-import httpx
 import json
 import re
 
 from ..core.config import get_settings
+from .base import LLMEngine
+from .registry import llm_engines
 
 
 MAX_WORDS = 2000
@@ -96,26 +97,242 @@ def resolve_passages(result,sources):
     return grounded(Generated.model_validate(data),sources)
 
 
-def local_url():
-    value = get_settings().ollama_url.rstrip('/')
+def base_url() -> str:
+    settings = get_settings()
+    value = settings.llm_base_url.rstrip('/')
     parsed = urlparse(value)
-    if parsed.scheme != 'http' or parsed.hostname not in {'127.0.0.1','localhost','::1'} or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+    if (
+        parsed.scheme not in ('http', 'https')
+        or parsed.hostname not in settings.llm_allowed_hosts
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
         raise ValueError('local_model_configuration')
     return value
 
 
-def status():
+_engine: LLMEngine | None = None
+
+
+def engine() -> LLMEngine:
+    global _engine
+    if _engine is None:
+        settings = get_settings()
+        _engine = llm_engines.create(settings.llm_engine)
+    return _engine
+
+
+def reset_engine() -> None:
+    global _engine
+    _engine = None
+
+
+class SummaryTextStream:
+    def __init__(self):
+        self.buffer = ""
+        self.stopped = False
+        self.mode = "SCAN"
+        self.stack = []
+        self.expect_key = False
+        self.current_key = ""
+        self.key_buffer = ""
+        self.in_summary = False
+        self.summary_depth = 0
+        self.need_separator = False
+        self.has_emitted_text = False
+
+    def feed(self, fragment: str) -> str:
+        if self.stopped:
+            return ""
+        self.buffer += fragment
+        output = []
+        i = 0
+
+        while i < len(self.buffer):
+            buf_len = len(self.buffer)
+            if self.mode == "SCAN":
+                c = self.buffer[i]
+                if c == "{":
+                    self.stack.append("{")
+                    self.expect_key = True
+                    i += 1
+                elif c == "}":
+                    if self.stack and self.stack[-1] == "{":
+                        self.stack.pop()
+                    self.expect_key = False
+                    i += 1
+                elif c == "[":
+                    if self.current_key == "summary" and not self.in_summary:
+                        self.in_summary = True
+                        self.summary_depth = len(self.stack) + 1
+                    self.stack.append("[")
+                    self.expect_key = False
+                    i += 1
+                elif c == "]":
+                    if self.in_summary and len(self.stack) == self.summary_depth:
+                        self.in_summary = False
+                    if self.stack and self.stack[-1] == "[":
+                        self.stack.pop()
+                    self.expect_key = False
+                    i += 1
+                elif c == ":":
+                    self.expect_key = False
+                    i += 1
+                elif c == ",":
+                    if self.stack and self.stack[-1] == "{":
+                        self.expect_key = True
+                    else:
+                        self.expect_key = False
+                    i += 1
+                elif c == '"':
+                    if self.expect_key:
+                        self.mode = "KEY"
+                        self.key_buffer = ""
+                    else:
+                        if self.in_summary and self.current_key == "text":
+                            self.mode = "TEXT"
+                        else:
+                            self.mode = "STRING"
+                    i += 1
+                else:
+                    i += 1
+
+            elif self.mode == "KEY":
+                c = self.buffer[i]
+                if c == "\\":
+                    if i + 1 >= buf_len:
+                        break
+                    c2 = self.buffer[i + 1]
+                    if c2 == "u":
+                        if i + 5 >= buf_len:
+                            break
+                        try:
+                            self.key_buffer += chr(int(self.buffer[i + 2 : i + 6], 16))
+                        except ValueError:
+                            pass
+                        i += 6
+                    else:
+                        escapes = {'"': '"', '\\': '\\', '/': '/', 'b': '\b', 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t'}
+                        self.key_buffer += escapes.get(c2, c2)
+                        i += 2
+                elif c == '"':
+                    self.current_key = self.key_buffer
+                    if self.current_key == "facts":
+                        self.stopped = True
+                        self.buffer = ""
+                        return "".join(output)
+                    self.mode = "SCAN"
+                    self.expect_key = False
+                    i += 1
+                else:
+                    self.key_buffer += c
+                    i += 1
+
+            elif self.mode == "STRING":
+                c = self.buffer[i]
+                if c == "\\":
+                    if i + 1 >= buf_len:
+                        break
+                    c2 = self.buffer[i + 1]
+                    if c2 == "u":
+                        if i + 5 >= buf_len:
+                            break
+                        i += 6
+                    else:
+                        i += 2
+                elif c == '"':
+                    self.mode = "SCAN"
+                    i += 1
+                else:
+                    i += 1
+
+            elif self.mode == "TEXT":
+                c = self.buffer[i]
+                if c == "\\":
+                    if i + 1 >= buf_len:
+                        break
+                    c2 = self.buffer[i + 1]
+                    if c2 == "u":
+                        if i + 5 >= buf_len:
+                            break
+                        try:
+                            decoded = chr(int(self.buffer[i + 2 : i + 6], 16))
+                            if self.need_separator:
+                                output.append("\n\n")
+                                self.need_separator = False
+                            output.append(decoded)
+                            self.has_emitted_text = True
+                        except ValueError:
+                            pass
+                        i += 6
+                    else:
+                        escapes = {'"': '"', '\\': '\\', '/': '/', 'b': '\b', 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t'}
+                        if self.need_separator:
+                            output.append("\n\n")
+                            self.need_separator = False
+                        output.append(escapes.get(c2, c2))
+                        self.has_emitted_text = True
+                        i += 2
+                elif c == '"':
+                    self.mode = "SCAN"
+                    if self.has_emitted_text:
+                        self.need_separator = True
+                    i += 1
+                else:
+                    if self.need_separator:
+                        output.append("\n\n")
+                        self.need_separator = False
+                    output.append(c)
+                    self.has_emitted_text = True
+                    i += 1
+
+        self.buffer = self.buffer[i:]
+        return "".join(output)
+
+
+def status(model: str | None = None) -> dict:
     settings = get_settings()
-    result = {'state':'unavailable','model':settings.summary_model,'maxSources':MAX_SOURCES,
-              'maxWords':MAX_WORDS,'maxSourceBytes':MAX_SOURCE_BYTES}
+    target_model = model or settings.summary_model
+    result = {
+        'state': 'unavailable',
+        'model': target_model,
+        'maxSources': MAX_SOURCES,
+        'maxWords': MAX_WORDS,
+        'maxSourceBytes': MAX_SOURCE_BYTES,
+    }
+
     try:
-        with httpx.Client(base_url=local_url(),trust_env=False,timeout=3,follow_redirects=False) as client:
-            response=client.get('/api/tags');response.raise_for_status()
-        models=response.json().get('models',[])
-        model=next((m for m in models if m.get('name')==settings.summary_model and m.get('size',0)>0 and not m.get('remote_model')),None)
-        if model: result.update(state='healthy',digest=model.get('digest','unknown'))
-        else: result.update(state='model_missing')
-    except (httpx.HTTPError, ValueError, TypeError): pass
+        eng = engine()
+        available_models = eng.models()
+        lookup = {m.id: m for m in available_models}
+    except Exception:
+        lookup = None
+
+    model_items = []
+    for mid in settings.llm_models:
+        if lookup is not None and mid in lookup:
+            info = lookup[mid]
+            model_items.append({'id': mid, 'available': info.available, 'digest': info.digest})
+        else:
+            model_items.append({'id': mid, 'available': False, 'digest': None})
+
+    result['models'] = model_items
+
+    if lookup is None:
+        result['state'] = 'unavailable'
+    else:
+        target_info = lookup.get(target_model)
+        if target_info and target_info.available:
+            result['state'] = 'healthy'
+            if target_info.digest:
+                result['digest'] = target_info.digest
+            else:
+                result['digest'] = 'unknown'
+        else:
+            result['state'] = 'model_missing'
+
     return result
 
 
@@ -161,19 +378,43 @@ def grounded(result,sources):
     return {'paragraphs':summary,'facts':facts}
 
 
-def generate(sources,kind):
-    check_size(sources,kind)
-    health=status()
-    if health['state']!='healthy':raise ValueError('model_unavailable')
-    settings=get_settings()
+def generate(sources, kind, model: str | None = None, on_delta=None) -> dict:
+    check_size(sources, kind)
+    settings = get_settings()
+    target_model = model or settings.summary_model
+
+    if target_model not in settings.llm_models:
+        raise ValueError('model_unavailable')
+
+    health = status(target_model)
+    if health['state'] != 'healthy':
+        raise ValueError('model_unavailable')
+
+    streamer = SummaryTextStream()
+    accumulated = []
+    msgs = messages(sources, kind)
+    schema = SelectedGeneration.model_json_schema()
+
+    eng = engine()
+    for fragment in eng.stream_json(target_model, msgs, schema, settings.llm_max_output_tokens):
+        accumulated.append(fragment)
+        delta = streamer.feed(fragment)
+        if on_delta and delta:
+            on_delta(delta)
+
+    raw_text = "".join(accumulated)
     try:
-        with httpx.Client(base_url=local_url(),trust_env=False,timeout=httpx.Timeout(240,connect=5),follow_redirects=False) as client:
-            response=client.post('/api/chat',json={'model':settings.summary_model,'stream':False,'think':False,
-                'format':SelectedGeneration.model_json_schema(),'messages':messages(sources,kind),
-                'options':{'temperature':0,'num_ctx':16384,'num_predict':3000},'keep_alive':'5m'})
-            response.raise_for_status();body=response.json()
-        if body.get('done_reason')=='length' or not body.get('done'):raise ValueError('incomplete_generation')
-        result=SelectedGeneration.model_validate_json(body['message']['content'])
-        return {**resolve_passages(result,sources),'model':health['model'],'modelDigest':health['digest'],'promptVersion':PROMPT_VERSION}
-    except httpx.HTTPError:raise ValueError('model_unavailable') from None
-    except (KeyError, TypeError):raise ValueError('invalid_generation') from None
+        result = SelectedGeneration.model_validate_json(raw_text)
+    except Exception:
+        raise ValueError('invalid_generation') from None
+
+    resolved = resolve_passages(result, sources)
+    digest = health.get('digest')
+    if digest == 'unknown':
+        digest = None
+    return {
+        **resolved,
+        'model': target_model,
+        'modelDigest': digest or 'unavailable',
+        'promptVersion': PROMPT_VERSION,
+    }

@@ -38,14 +38,6 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
-class LoginSession(Base):
-    __tablename__ = "login_sessions"
-    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
-
-
 class CredentialToken(Base):
     """Only the hash is stored; each account has at most one current credential link."""
     __tablename__ = "credential_tokens"
@@ -57,13 +49,6 @@ class CredentialToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-class LoginBucket(Base):
-    __tablename__ = "login_buckets"
-    key: Mapped[str] = mapped_column(String(64), primary_key=True)
-    attempts: Mapped[int] = mapped_column(Integer, default=0)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class AuditEvent(Base):
@@ -150,7 +135,6 @@ class StoredDocument(Base):
     uploaded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     digest: Mapped[str] = mapped_column(String(64))
     metadata_payload: Mapped[bytes] = mapped_column(LargeBinary)
-    original_payload: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, nullable=True)
     object_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     media_type: Mapped[str] = mapped_column(String(32))

@@ -35,7 +35,9 @@ def _record_integrity_failure(request):
 def register_error_handlers(app):
     @app.exception_handler(HTTPException)
     async def http_error(request, exc):
-        return error(request, exc.status_code, CODES.get(exc.status_code, "REQUEST_FAILED"), str(exc.detail))
+        response = error(request, exc.status_code, CODES.get(exc.status_code, "REQUEST_FAILED"), str(exc.detail))
+        response.headers.update(exc.headers or {})
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):

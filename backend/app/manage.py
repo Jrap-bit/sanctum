@@ -24,7 +24,7 @@ def read_password():
     return password
 
 
-def create_user(db, username, name, role, password):
+def create_user(db, username, name, role, password, email=None):
     username = username.strip().lower()
     if not re.fullmatch(r"[a-z0-9_.-]{3,64}", username):
         raise ValueError("Username must be 3–64 letters, digits, dots, underscores or hyphens.")
@@ -32,8 +32,18 @@ def create_user(db, username, name, role, password):
         raise ValueError("Display name must be 1–160 characters.")
     if not 12 <= len(password) <= 128:
         raise ValueError("Password must contain 12–128 characters.")
-    user = User(username=username, display_name=name.strip(), password_hash=passwords.hash(password),
-                capabilities=ROLE_CAPABILITIES[role], active=True)
+    if email is not None:
+        email = email.strip().lower()
+        if len(email) > 254 or not re.fullmatch(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+            raise ValueError("Invalid email address.")
+    user = User(
+        username=username,
+        display_name=name.strip(),
+        password_hash=passwords.hash(password),
+        capabilities=ROLE_CAPABILITIES[role],
+        active=True,
+        email=email,
+    )
     db.add(user)
     db.flush()
     operator_event(db, "user.create", user.id)
@@ -53,13 +63,14 @@ def main():
     create.add_argument("--username", required=True)
     create.add_argument("--name", required=True)
     create.add_argument("--role", choices=ROLE_CAPABILITIES, default="clinician")
+    create.add_argument("--email", default=None)
     for command in ("deactivate-user", "activate-user", "reset-password"):
         commands.add_parser(command).add_argument("--username", required=True)
     args = parser.parse_args()
     try:
         with SessionLocal() as db:
             if args.command == "create-user":
-                create_user(db, args.username, args.name, args.role, read_password())
+                create_user(db, args.username, args.name, args.role, read_password(), email=args.email)
                 print("Account created. You can now sign in.")
                 return
             new_password = read_password() if args.command == "reset-password" else None
