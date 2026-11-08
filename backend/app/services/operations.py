@@ -126,6 +126,12 @@ def format_manifest_summary(manifest: dict | str) -> str:
     return f"{len(row_counts)} tables, {sum(row_counts.values())} rows, {len(objects)} objects"
 
 
+def _allow_governed_removal(db):
+    """Let this transaction alone pass the immutability triggers (PostgreSQL only)."""
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(text("SELECT set_config('sanctum.governed_removal', 'on', true)"))
+
+
 def delete_patient(db, request, user, patient, reason: str):
     patient_id_str = str(patient.id)
     opaque_id = hashlib.sha256(patient_id_str.encode("utf-8")).hexdigest()
@@ -150,6 +156,7 @@ def delete_patient(db, request, user, patient, reason: str):
     db.commit()
 
     try:
+        _allow_governed_removal(db)
         docs = db.scalars(select(StoredDocument).where(StoredDocument.patient_id == patient_id_str)).all()
         store = get_store()
         for doc in docs:
@@ -418,6 +425,7 @@ def restore_package(db, data: bytes) -> dict:
                 ct = doc_media_types.get(obj_key, "application/octet-stream")
                 store.put(obj_key, obj_data, ct)
 
+        _allow_governed_removal(db)
         db.execute(update(ClinicalNote).values(parent_id=None))
         for table in reversed(Base.metadata.sorted_tables):
             if table.name in ("backups", "deletion_registry"):
