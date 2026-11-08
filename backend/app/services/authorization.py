@@ -1,4 +1,4 @@
-from fastapi import HTTPException
+from ..core.exceptions import AccessDenied
 from sqlalchemy import select
 
 from ..db.models import ClinicalGrant
@@ -8,7 +8,7 @@ from ..db.models import PatientAccess
 
 def require(user, capability):
     if capability not in user.capabilities:
-        raise HTTPException(403, "This action is outside your permissions.")
+        raise AccessDenied(403, "This action is outside your permissions.", user.id)
 
 
 def access_ids(user,write=False):
@@ -36,9 +36,9 @@ def scoped_patient(db, user, patient_id, *, clinical=False, write=False, lock=Fa
         statement = statement.with_for_update()
     patient = db.scalar(statement)
     if patient is None or patient.status == "deleting":
-        raise HTTPException(404, "Patient unavailable.")
+        raise AccessDenied(404, "Patient unavailable.", user.id, str(patient_id))
     # Recheck after acquiring the patient lock: a grant may have been revoked
     # while this transaction waited for another writer.
     if lock and (clinical or write or "users:manage" not in user.capabilities) and not has_access(db,user,patient.id,write=True):
-        raise HTTPException(404, "Patient unavailable.")
+        raise AccessDenied(404, "Patient unavailable.", user.id, str(patient_id))
     return patient
