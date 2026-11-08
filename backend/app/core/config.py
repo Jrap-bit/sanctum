@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     ollama_url: str = "http://127.0.0.1:11434"
     summary_model: str = "qwen3:4b"
     # Runtime is a URL: host Ollama, Docker Model Runner, or the containerised CPU profile.
-    llm_engine: str = "openai_compat"
+    llm_engine: str = "ollama"
     llm_base_url: str = "http://127.0.0.1:11434/v1"
     llm_api_key: str = "local"
     llm_models: list[str] = ["qwen3:4b", "qwen3:1.7b", "llama3.2:3b", "gemma4:e2b"]

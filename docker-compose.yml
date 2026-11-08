@@ -18,6 +18,7 @@ x-backend: &x-backend
     BACKUP_PATH: /data/backups
     MASTER_KEY_PATH: /secrets/master.key
     WRAPPED_KEYS_PATH: /secrets/data-keys.json
+    LLM_ENGINE: ${LLM_ENGINE:-ollama}
     LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
     SUMMARY_MODEL: ${SUMMARY_MODEL:-qwen3:4b}
     OCR_ENGINE: ${OCR_ENGINE:-tesseract}
@@ -65,6 +66,7 @@ services:
 
   api:
     <<: *x-backend
+    command: ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000","--proxy-headers","--forwarded-allow-ips","*"]
     restart: unless-stopped
     depends_on:
       migrate:

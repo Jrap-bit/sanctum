@@ -16,6 +16,7 @@ def upgrade():
     op.drop_constraint('patient_status', 'patients', type_='check')
     op.create_check_constraint('patient_status', 'patients', "status IN ('active', 'archived', 'deleting')")
     op.add_column('stored_documents', sa.Column('object_key', sa.String(255), nullable=True))
+    op.add_column('stored_documents', sa.Column('withdrawn_at', sa.DateTime(timezone=True), nullable=True))
     op.alter_column('stored_documents', 'original_payload', existing_type=sa.LargeBinary(), nullable=True)
     op.add_column('summary_jobs', sa.Column('model', sa.String(80), nullable=True))
     op.create_table('reports',
@@ -52,6 +53,7 @@ def downgrade():
     op.drop_table('deletion_registry')
     op.drop_table('reports')
     op.drop_column('summary_jobs', 'model')
+    op.drop_column('stored_documents', 'withdrawn_at')
     op.drop_column('stored_documents', 'object_key')
     op.drop_constraint('uq_users_google_sub', 'users', type_='unique')
     op.drop_constraint('uq_users_email', 'users', type_='unique')

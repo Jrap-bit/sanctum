@@ -152,6 +152,7 @@ class StoredDocument(Base):
     metadata_payload: Mapped[bytes] = mapped_column(LargeBinary)
     original_payload: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, nullable=True)
     object_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     media_type: Mapped[str] = mapped_column(String(32))
     review_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     page_count: Mapped[int] = mapped_column(Integer)

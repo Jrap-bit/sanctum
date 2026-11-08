@@ -25,5 +25,6 @@ ocr_engines = Registry("OCR engine", {"tesseract": "app.adapters.ocr_tesseract:T
                                       "fake": "app.adapters.ocr_fake:FakeOCR"})
 object_stores = Registry("object store", {"filesystem": "app.adapters.objectstore:FilesystemStore",
                                           "s3": "app.adapters.objectstore:S3Store"})
-llm_engines = Registry("LLM engine", {"openai_compat": "app.adapters.llm_openai:OpenAICompatEngine",
+llm_engines = Registry("LLM engine", {"ollama": "app.adapters.llm_ollama:OllamaEngine",
+                                      "openai_compat": "app.adapters.llm_openai:OpenAICompatEngine",
                                       "fake": "app.adapters.llm_fake:FakeEngine"})
