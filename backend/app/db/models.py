@@ -33,6 +33,8 @@ class User(Base):
     credentials_ready: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     password_reset_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
+    email: Mapped[str | None] = mapped_column(String(254), unique=True, nullable=True)
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
@@ -77,7 +79,7 @@ class AuditEvent(Base):
 
 class Patient(Base):
     __tablename__ = "patients"
-    __table_args__ = (CheckConstraint("status IN ('active', 'archived')", name="patient_status"),)
+    __table_args__ = (CheckConstraint("status IN ('active', 'archived', 'deleting')", name="patient_status"),)
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     profile: Mapped[bytes] = mapped_column(LargeBinary)
     status: Mapped[str] = mapped_column(String(16), default="active", index=True)
@@ -148,7 +150,8 @@ class StoredDocument(Base):
     uploaded_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     digest: Mapped[str] = mapped_column(String(64))
     metadata_payload: Mapped[bytes] = mapped_column(LargeBinary)
-    original_payload: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    original_payload: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, nullable=True)
+    object_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     media_type: Mapped[str] = mapped_column(String(32))
     review_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     page_count: Mapped[int] = mapped_column(Integer)
@@ -206,6 +209,7 @@ class SummaryJob(Base):
     requested_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
     request_key: Mapped[str] = mapped_column(String(36))
     request_hash: Mapped[str] = mapped_column(String(64))
+    model: Mapped[str | None] = mapped_column(String(80), nullable=True)
     kind: Mapped[str] = mapped_column(String(24))
     payload: Mapped[bytes] = mapped_column(LargeBinary)
     state: Mapped[str] = mapped_column(String(16), default="queued", index=True)
@@ -299,3 +303,41 @@ class ClinicalGrant(Base):
     payload: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True),default=now)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True),nullable=True)
+
+
+class Report(Base):
+    """A previewed manifest of exact source versions; export recomputes eligibility against it."""
+    __tablename__ = "reports"
+    __table_args__ = (CheckConstraint("state IN ('previewed', 'exported')", name="report_state"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    patient_id: Mapped[str] = mapped_column(ForeignKey("patients.id"), index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    payload: Mapped[bytes] = mapped_column(LargeBinary)
+    state: Mapped[str] = mapped_column(String(16), default="previewed")
+    content_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    exported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DeletionRecord(Base):
+    """Nonclinical marker that stops a restore reintroducing a deleted patient."""
+    __tablename__ = "deletion_registry"
+    __table_args__ = (CheckConstraint("state IN ('deleting', 'completed')", name="deletion_state"),)
+    opaque_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    reason: Mapped[bytes] = mapped_column(LargeBinary)
+    state: Mapped[str] = mapped_column(String(16), default="deleting")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BackupRecord(Base):
+    __tablename__ = "backups"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    path: Mapped[str] = mapped_column(String(500))
+    digest: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    manifest: Mapped[dict] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

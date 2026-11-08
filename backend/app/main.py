@@ -1,10 +1,5 @@
 from fastapi import FastAPI
 from fastapi import Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm.exc import StaleDataError
-from starlette.exceptions import HTTPException
 from uuid import uuid4
 
 from .api.admin_users import router as admin_router
@@ -24,14 +19,15 @@ from .api.summaries import router as summary_router
 from .core.config import get_settings
 
 
+from .api.audit import router as audit_router
+from .api.model_catalog import router as model_catalog_router
+from .api.operations import router as operations_router
+from .api.reports import router as report_router
+from .api.ws import router as ws_router
+from .core.errors import error, register_error_handlers
+
 app = FastAPI(title="Sanctum API", version="0.5.0")
-
-
-def error(request, status, code, message, fields=None):
-    return JSONResponse(status_code=status, content={
-        "code": code, "message": message, "fieldErrors": fields or {},
-        "requestId": request.state.request_id,
-    })
+register_error_handlers(app)
 
 
 @app.middleware("http")
@@ -49,29 +45,6 @@ async def request_safety(request: Request, call_next):
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
-
-
-@app.exception_handler(HTTPException)
-async def http_error(request, exc):
-    codes = {401: "UNAUTHENTICATED", 403: "FORBIDDEN", 404: "NOT_FOUND", 409: "VERSION_CONFLICT", 429: "RATE_LIMITED"}
-    return error(request, exc.status_code, codes.get(exc.status_code, "REQUEST_FAILED"), str(exc.detail))
-
-
-@app.exception_handler(RequestValidationError)
-async def validation_error(request, exc):
-    fields = {".".join(map(str, e["loc"][1:])): e["msg"] for e in exc.errors()}
-    return error(request, 422, "VALIDATION_ERROR", "Check the submitted fields.", fields)
-
-
-@app.exception_handler(SQLAlchemyError)
-async def database_error(request, exc):
-    # Never expose SQL parameters (which can include credentials) in public errors.
-    return error(request, 503, "DATABASE_UNAVAILABLE", "The records service is unavailable.")
-
-
-@app.exception_handler(StaleDataError)
-async def stale_update(request, exc):
-    return error(request, 409, "VERSION_CONFLICT", "A newer version exists. Refresh and try again.")
 
 
 @app.get("/api/v1/health", tags=["Health"])
@@ -119,3 +92,8 @@ app.include_router(rule_router)
 
 
 app.include_router(grant_router)
+app.include_router(report_router)
+app.include_router(audit_router)
+app.include_router(operations_router)
+app.include_router(model_catalog_router)
+app.include_router(ws_router)
