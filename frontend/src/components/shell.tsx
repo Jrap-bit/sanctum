@@ -11,7 +11,6 @@ import { Modal } from './modal';
 const navigation: { href: string; label: string; icon: IconName; cap: Capability }[] = [
   { href: '/patients', label: 'Patients', icon: 'patient', cap: 'patients:read' },
   { href: '/admin/users', label: 'People', icon: 'users', cap: 'users:manage' },
-  { href: '/admin/assignments', label: 'Assignments', icon: 'handover', cap: 'assignments:manage' },
   { href: '/access/grants', label: 'Access requests', icon: 'key', cap: 'grants:request' },
   { href: '/oversight/rules', label: 'Decision rules', icon: 'rules', cap: 'rules:publish' },
   { href: '/audit', label: 'Activity log', icon: 'audit', cap: 'audit:read' },

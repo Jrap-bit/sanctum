@@ -679,3 +679,15 @@ input, textarea { caret-color: var(--primary); }
 /* Errors are readable immediately; menu entrances retain an opaque surface. */
 .notice[role="alert"] { animation: none; }
 @keyframes menu-reveal { from { transform: translateY(4px); } to { transform: translateY(0); } }
+
+/* Job progress bar styling */
+.job-progress { display: flex; flex-direction: column; gap: 4px; min-width: 140px; }
+.progress.indeterminate > span {
+  width: 40%;
+  animation: progress-indeterminate 1.4s ease-in-out infinite;
+}
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+

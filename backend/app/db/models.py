@@ -309,7 +309,7 @@ class DeletionRecord(Base):
     __tablename__ = "deletion_registry"
     __table_args__ = (CheckConstraint("state IN ('deleting', 'completed')", name="deletion_state"),)
     opaque_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    actor_id: Mapped[str] = mapped_column(String(36))  # Plain id: this record outlives a restore.
     reason: Mapped[bytes] = mapped_column(LargeBinary)
     state: Mapped[str] = mapped_column(String(16), default="deleting")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
@@ -319,7 +319,7 @@ class DeletionRecord(Base):
 class BackupRecord(Base):
     __tablename__ = "backups"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)  # Outlives a restore.
     path: Mapped[str] = mapped_column(String(500))
     digest: Mapped[str] = mapped_column(String(64))
     size_bytes: Mapped[int] = mapped_column(Integer)

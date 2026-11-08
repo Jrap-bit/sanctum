@@ -82,7 +82,7 @@ class PatientOutput(BaseModel):
     id: str
     displayName: str
     dateOfBirth: date | None
-    status: Literal["active", "archived"]
+    status: Literal["active", "archived", "deleting"]
     assignment: str
     assignedPractitionerIds: list[str]
     version: int
@@ -118,6 +118,8 @@ def serialize(db, user, patient):
         actions.append("clinical:read")
     if (scoped and has_access(db,user,patient.id,write=True) and "clinical:write" in user.capabilities) or "users:manage" in user.capabilities:
         actions.extend(["archive", "edit"])
+    if scoped and "patients:delete" in user.capabilities and "users:manage" in user.capabilities:
+        actions.append("delete")
     practitioner = db.get(User, patient.primary_practitioner_id)
     return PatientOutput(id=patient.id, displayName=profile["displayName"], dateOfBirth=profile["dateOfBirth"],
                          status=patient.status, version=patient.version, assignment=practitioner.display_name,

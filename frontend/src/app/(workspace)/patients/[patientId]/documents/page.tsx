@@ -5,10 +5,17 @@ import { useEffect, useRef, useState } from 'react';
 import { Require } from '@/components/shell';
 import { Icon } from '@/components/icon';
 import { Badge, Message, Panel, State, TimeText, WorkflowSteps, SectionHeader } from '@/components/ui';
+import { JobProgress } from '@/components/job-progress';
 import { API_BASE, ApiError, api, post, patientPath, protectedDownload } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useAction, useResource } from '@/lib/hooks';
 import type { Document } from '@/lib/types';
+import { useJobStream } from '@/lib/ws';
+
+function DocumentProgress({ jobId, filename, fallback, reload }: { jobId: string; filename: string; fallback?: number; reload: () => Promise<void> | void }) {
+  const { event } = useJobStream(jobId, () => void reload());
+  return <JobProgress label={`Extraction: ${filename}`} event={event} fallback={fallback} />;
+}
 
 export default function DocumentsPage() {
   const id = useParams<{patientId: string}>().patientId;
@@ -89,7 +96,7 @@ export default function DocumentsPage() {
     <Panel title="Your files" icon="document" action={<button className="button small-button" disabled={loading} onClick={() => {setPollError(null); void reload();}}>Refresh files</button>}>
       <State loading={loading} error={error} retry={()=>void reload()} empty={!data?.items.length}>{data?.items.map(d => <div key={d.id} className="list-item row between"><div>
         <strong>{d.filename}</strong><p>Uploaded <TimeText date={d.uploadedAt}/> · {d.pageCount} page(s) · {d.uploader || 'Unknown uploader'}</p>
-        <div className="row"><Badge>{d.reviewState}</Badge><Badge>{d.jobState === 'not_started' ? 'Ready for extraction' : d.jobState}</Badge>{d.jobState === 'running' && <span>{d.progress || 0}% processed</span>}</div>{d.processingMessage && <p role="status">{d.processingMessage}</p>}
+        <div className="row"><Badge>{d.reviewState}</Badge><Badge>{d.jobState === 'not_started' ? 'Ready for extraction' : d.jobState}</Badge>{['queued', 'running'].includes(d.jobState) && d.jobId ? <DocumentProgress jobId={d.jobId} filename={d.filename} fallback={d.progress} reload={reload} /> : (d.jobState === 'running' && <span>{d.progress || 0}% processed</span>)}</div>{d.processingMessage && <p role="status">{d.processingMessage}</p>}
       </div><div className="row"><button className="button small-button" disabled={action.pending} onClick={() => void action.run(() => protectedDownload(`${base}/${encodeURIComponent(d.id)}/original`, d.filename))}>Download original</button>
         {has('documents:write') && d.jobState === 'not_started' && <button className="button small-button" disabled={action.pending} onClick={() => void process(d.id, 'process')}>Start extraction</button>}
         {has('documents:write') && ['failed', 'cancelled'].includes(d.jobState) && <button className="button small-button" disabled={action.pending} onClick={() => void process(d.id, 'retry')}>Retry extraction</button>}

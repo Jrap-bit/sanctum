@@ -20,6 +20,13 @@ export default function LoginPage() {
   const params = useSearchParams();
   const { refresh } = useAuth();
   const health = useResource<Health>('/health');
+  const providers = useResource<{ google: boolean }>('/auth/providers');
+  const nextParam = params.get('next');
+  let safeNext = '';
+  if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.startsWith('/login')) {
+    safeNext = nextParam;
+  }
+  const googleHref = `/api/v1/auth/google/login${safeNext ? `?next=${encodeURIComponent(safeNext)}` : ''}`;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -59,6 +66,7 @@ export default function LoginPage() {
         <h2 id="login-title">Sign in</h2>
         {process.env.NEXT_PUBLIC_DEMO_MODE === '1' && <details className="auth-demo-access"><summary><Icon name="key" size={16}/><span>Synthetic demo access</span><Icon name="chevron" size={14}/></summary><dl className="auth-demo-credentials"><div><dt>Username</dt><dd><code>clinician</code><code>admin</code><code>oversight</code></dd></div><div><dt>Password</dt><dd><code>demo123</code></dd></div></dl><p>Demo data resets on restart.</p></details>}
         {params.has('expired') && <div className="notice warning">Your session ended. Please sign in again.</div>}
+        {params.get('error') === 'google' && <div className="notice warning">Google sign-in was not completed. Your Google account must match an active Sanctum account.</div>}
         {health.error && <div className="notice warning">Local service unavailable. Try again when it’s online.</div>}
         {health.data?.database && health.data.database !== 'healthy' && <div className="notice warning">The records service needs attention.</div>}
         <Message error={error}/>
@@ -67,6 +75,9 @@ export default function LoginPage() {
           <Field label="Password"><div className="auth-password"><input type={show ? 'text' : 'password'} autoComplete="current-password" maxLength={128} disabled={busy} required value={password} onChange={e => setPassword(e.target.value)}/><button type="button" disabled={busy} aria-pressed={show} onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>{show ? 'Hide' : 'Show'}</button></div></Field>
           <button className="button primary auth-submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}<span aria-hidden="true">↗</span></button>
         </form>
+        {providers.data?.google && (
+          <a className="button" style={{ marginTop: 12 }} href={googleHref}>Continue with Google</a>
+        )}
         <p className="auth-help"><span>Need access or a password reset?</span><span>Contact your clinic administrator.</span></p>
       </section>
     </main>

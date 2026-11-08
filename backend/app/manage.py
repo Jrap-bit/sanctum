@@ -1,5 +1,8 @@
 """Local operator commands; passwords are prompted, never command-line arguments."""
 from getpass import getpass
+import os
+from pathlib import Path
+import sys
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.exc import SQLAlchemyError
@@ -7,12 +10,14 @@ from uuid import uuid4
 import argparse
 import re
 
+from .adapters.crypto import decrypt, encrypt
 from .core.capabilities import ROLE_CAPABILITIES
 from .core.database import SessionLocal
 from .core.security import passwords
-from .db.models import AuditEvent
-from .db.models import User
+from .db.models import AuditEvent, Patient, PatientAccess, User
 from .services.accounts import invalidate_credentials
+from .services.operations import create_backup, restore_package, validate_package, PackageInvalid
+from .services.patients import event
 
 
 def read_password():
@@ -66,9 +71,79 @@ def main():
     create.add_argument("--email", default=None)
     for command in ("deactivate-user", "activate-user", "reset-password"):
         commands.add_parser(command).add_argument("--username", required=True)
+    backup_parser = commands.add_parser("backup")
+    backup_parser.add_argument("--destination", default=None)
+    restore_parser = commands.add_parser("restore")
+    restore_parser.add_argument("--verify-first", required=True)
+    commands.add_parser("seed-synthetic")
     args = parser.parse_args()
     try:
         with SessionLocal() as db:
+            if args.command == "backup":
+                dest = Path(args.destination) if args.destination else None
+                record = create_backup(db, actor_id=None, destination=dest)
+                print(record.path)
+                print("Backup verified.")
+                return
+            if args.command == "restore":
+                path = Path(args.verify_first)
+                if not path.is_file():
+                    parser.exit(1, "Backup file not found.\n")
+                data = path.read_bytes()
+                try:
+                    validate_package(data, db)
+                    print("Backup verified.")
+                except PackageInvalid:
+                    parser.exit(1, "Backup failed verification. Nothing was changed.\n")
+                restore_package(db, data)
+                return
+            if args.command == "seed-synthetic":
+                seed_password = os.environ.get("SANCTUM_SEED_PASSWORD", "")
+                if len(seed_password) < 12:
+                    parser.exit(1, "SANCTUM_SEED_PASSWORD must be at least 12 characters.\n")
+                for username, role in [
+                    ("clinician", "clinician"),
+                    ("admin", "admin"),
+                    ("oversight", "oversight"),
+                    ("clinical_admin", "clinical_admin"),
+                ]:
+                    existing_user = db.scalar(select(User).where(User.username == username))
+                    if existing_user is None:
+                        create_user(db, username, username.replace("_", " ").title(), role, seed_password)
+
+                clinician_user = db.scalar(select(User).where(User.username == "clinician"))
+                oversight_user = db.scalar(select(User).where(User.username == "oversight"))
+                clinical_admin_user = db.scalar(select(User).where(User.username == "clinical_admin"))
+
+                for name in ["Avery Reed (synthetic)", "Jordan Ellis (synthetic)"]:
+                    found_patient = None
+                    for p in db.scalars(select(Patient)).all():
+                        try:
+                            prof = decrypt(p.profile, f"patient:{p.id}")
+                            if prof.get("displayName") == name:
+                                found_patient = p
+                                break
+                        except Exception:
+                            pass
+                    if found_patient is None:
+                        patient_id = str(uuid4())
+                        profile = {"displayName": name, "dateOfBirth": None}
+                        patient = Patient(
+                            id=patient_id,
+                            profile=encrypt(profile, f"patient:{patient_id}"),
+                            created_by=clinician_user.id,
+                            primary_practitioner_id=clinician_user.id,
+                        )
+                        db.add(patient)
+                        db.flush()
+                        event(db, clinician_user, patient, "Patient profile created")
+                        found_patient = patient
+
+                    for u in (clinician_user, oversight_user, clinical_admin_user):
+                        if not db.get(PatientAccess, (found_patient.id, u.id)):
+                            db.add(PatientAccess(patient_id=found_patient.id, user_id=u.id))
+                db.commit()
+                return
             if args.command == "create-user":
                 create_user(db, args.username, args.name, args.role, read_password(), email=args.email)
                 print("Account created. You can now sign in.")
