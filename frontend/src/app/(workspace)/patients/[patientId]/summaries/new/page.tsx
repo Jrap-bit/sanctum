@@ -112,7 +112,7 @@ export default function NewSummary() {
       {kind==='single_session'&&chosen.length>1&&<p className="notice warning">Select exactly one source for one session, or choose Across sessions.</p>}{tooMany&&<p className="notice danger">Choose fewer or shorter sources.</p>}<Message error={action.error||jobError}/>
       <div className="row"><button className="button primary" disabled={action.pending||active||!chosen.length||tooMany||(kind==='single_session'&&chosen.length!==1)||health.data?.state!=='healthy'} onClick={()=>void generate()}>Generate draft</button><button className="button" disabled={active||action.pending} onClick={()=>void sources.reload()}>Refresh sources</button></div>
     </Panel>
-    {job&&<Panel title="Draft progress" icon="activity"><Badge>{job.state}</Badge>
+    {job&&<Panel title="Draft progress" icon="activity"><Badge>{event?.state ?? job.state}</Badge>
       <JobProgress label="Draft progress" event={event} fallback={job.progress}/>
       <p>{job.message||'Processing the selected records locally. Keep the AI worker running.'}</p>
       {!['completed', 'failed', 'cancelled'].includes(job.state) && Boolean(text) && (
