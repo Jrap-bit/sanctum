@@ -269,3 +269,89 @@ def test_wrong_nonce_and_unverified_email_are_refused(setup, monkeypatch):
     cb2 = client.get(f"/api/v1/auth/google/callback?code=code2&state={state2}", follow_redirects=False)
     assert cb2.status_code == 302
     assert cb2.headers["location"] == "/login?error=google"
+
+
+ORIGIN = {"Origin": "http://localhost:3000"}
+
+
+def google_sign_in(client, monkeypatch, sub="new-sub", email="New.Person@example.com", name="New Person"):
+    login_res = client.get("/api/v1/auth/google/login", follow_redirects=False)
+    state = parse_qs(urlparse(login_res.headers["location"]).query)["state"][0]
+    nonce = json.loads(get_redis().get(f"oauth:{token_digest(state)}"))["nonce"]
+
+    class MockTokenResponse:
+        status_code = 200
+
+        def json(self):
+            return {"id_token": "valid-id-token"}
+
+    monkeypatch.setattr("httpx.post", lambda *args, **kwargs: MockTokenResponse())
+    monkeypatch.setattr(
+        "app.services.auth.verify_google_token",
+        lambda raw_tok: {"sub": sub, "email": email, "email_verified": True, "name": name, "nonce": nonce},
+    )
+    return client.get(f"/api/v1/auth/google/callback?code=c&state={state}", follow_redirects=False)
+
+
+def enable_self_signup(monkeypatch):
+    enable_google(monkeypatch)
+    monkeypatch.setattr(get_settings(), "google_self_signup", True)
+
+
+def test_self_signup_creates_roleless_account_then_role_is_chosen_once(setup, monkeypatch):
+    client, factory = setup
+    enable_self_signup(monkeypatch)
+
+    callback = google_sign_in(client, monkeypatch)
+
+    assert callback.headers["location"] == "/choose-role"
+    me = client.get("/api/v1/auth/me").json()
+    assert me["capabilities"] == [] and me["displayName"] == "New Person"
+    assert client.get("/api/v1/patients").status_code == 403
+    with factory() as db:
+        user = db.scalar(select(User).where(User.email == "new.person@example.com"))
+        assert user.google_sub == "new-sub" and user.username == "new.person"
+
+    chosen = client.post("/api/v1/auth/role", headers=ORIGIN, json={"role": "clinician"})
+    assert chosen.status_code == 200
+    assert "clinical:write" in chosen.json()["capabilities"]
+    assert client.get("/api/v1/patients").status_code == 200
+    assert client.post("/api/v1/auth/role", headers=ORIGIN, json={"role": "clinical_admin"}).status_code == 409
+
+
+def test_returning_user_without_role_is_sent_back_to_choose(setup, monkeypatch):
+    client, _ = setup
+    enable_self_signup(monkeypatch)
+    google_sign_in(client, monkeypatch)
+
+    assert google_sign_in(client, monkeypatch).headers["location"] == "/choose-role"
+
+
+def test_role_choice_is_refused_when_self_signup_is_off(setup, monkeypatch):
+    client, _ = setup
+    enable_self_signup(monkeypatch)
+    google_sign_in(client, monkeypatch)
+    monkeypatch.setattr(get_settings(), "google_self_signup", False)
+
+    assert client.post("/api/v1/auth/role", headers=ORIGIN, json={"role": "admin"}).status_code == 404
+
+
+def test_unknown_role_is_rejected(setup, monkeypatch):
+    client, _ = setup
+    enable_self_signup(monkeypatch)
+    google_sign_in(client, monkeypatch)
+
+    assert client.post("/api/v1/auth/role", headers=ORIGIN, json={"role": "superuser"}).status_code == 422
+
+
+def test_username_collision_gets_a_unique_name(setup, monkeypatch):
+    client, factory = setup
+    enable_self_signup(monkeypatch)
+
+    google_sign_in(client, monkeypatch, sub="sub-a", email="same@example.com")
+    client.post("/api/v1/auth/logout", headers=ORIGIN)
+    google_sign_in(client, monkeypatch, sub="sub-b", email="same@other.example")
+
+    with factory() as db:
+        names = sorted(u.username for u in db.scalars(select(User).where(User.google_sub.is_not(None))))
+    assert len(names) == 2 and names[0] == "same" and names[1].startswith("same-")

@@ -56,4 +56,5 @@ These belong in chapter 13 of the documentation.
 | Section 3.4 upload limit of 20 pages | 500 pages |
 | ADR-14 runtime | Model reached over HTTP by a configurable URL, with Ollama and OpenAI-compatible engines |
 | Tesseract and PDF | Tesseract with PDFium, chosen by name through a factory |
+| FR-02 administrators create accounts | With `GOOGLE_SELF_SIGNUP=true`, a Google sign-in creates its own account and chooses its own role, bypassing FR-02 and the separation tested by IT-06. Off by default; turned on for the local demo stack. |
 | Added | Decommissioned handover screen, `clinical_admin` operator-only role, optional Google sign-in |

@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import re
 import secrets
 import urllib.parse
 from fastapi import HTTPException
@@ -8,8 +9,10 @@ import httpx
 from pydantic import BaseModel
 import redis
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from ..core.cache import get_redis
+from ..core.capabilities import ROLE_CAPABILITIES
 from ..core.config import get_settings
 from ..core.security import COOKIE_NAME
 from ..core.security import dummy_hash
@@ -296,11 +299,60 @@ def google_callback(
             user.google_sub = sub
 
     if user is None:
-        return fail()
+        if not settings.google_self_signup:
+            return fail()
+        user = _create_google_account(db, sub, email, payload.get("name"))
+        if user is None:
+            return fail()
 
     if not user.active or not user.credentials_ready or user.password_reset_required:
         return fail()
 
+    if not user.capabilities:
+        target_next = "/choose-role"
     audit(db, request, "auth.google", "success", user.id)
     db.commit()
     return target_next, user.id
+
+
+def _available_username(db, email):
+    base = re.sub(r"[^a-z0-9_.-]", "", email.split("@")[0].lower())[:55]
+    if len(base) < 3:
+        base = f"google-{base}"
+    candidate = base
+    while db.scalar(select(User.id).where(User.username == candidate)) is not None:
+        candidate = f"{base}-{secrets.token_hex(3)}"
+    return candidate
+
+
+def _create_google_account(db, sub, email, name):
+    """Create a role-less account. It can do nothing until choose_role assigns authority."""
+    user = User(
+        username=_available_username(db, email),
+        display_name=(name or email).strip()[:160],
+        email=email.lower(),
+        google_sub=sub,
+        password_hash=passwords.hash(secrets.token_urlsafe(32)),
+        capabilities=[],
+        active=True,
+    )
+    try:
+        with db.begin_nested():
+            db.add(user)
+            db.flush()
+    except IntegrityError:
+        return None
+    return user
+
+
+def choose_role(db, request, user, role):
+    """Assign the one role a self-registered Google account picks after first sign-in."""
+    if not get_settings().google_self_signup:
+        raise HTTPException(404, "Role selection is not available.")
+    current = db.scalar(select(User).where(User.id == user.id).with_for_update())
+    if current.google_sub is None or current.capabilities:
+        raise HTTPException(409, "This account already has a role.")
+    current.capabilities = ROLE_CAPABILITIES[role]
+    audit(db, request, "auth.role_selected", "success", current.id)
+    db.commit()
+    return public_user(current)

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter
 from fastapi import Request
 from fastapi import Response
@@ -77,6 +79,16 @@ def activate(data: ActivateInput, request: Request, db: Db):
 @router.get("/providers")
 def providers():
     return auth_service.providers()
+
+
+class RoleInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["clinician", "admin", "oversight", "clinical_admin"]
+
+
+@router.post("/role", response_model=UserOutput)
+def choose_role(data: RoleInput, user: CurrentUser, db: Db, request: Request):
+    return auth_service.choose_role(db, request, user, data.role)
 
 
 @router.get("/google/login")

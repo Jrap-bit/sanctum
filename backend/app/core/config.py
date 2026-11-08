@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None
     google_redirect_uri: str | None = None
+    # Prototype convenience: unknown Google accounts register themselves and choose a role.
+    google_self_signup: bool = False
 
     db_pool_size: int = Field(default=5, ge=1, le=50)
     db_max_overflow: int = Field(default=10, ge=0, le=50)

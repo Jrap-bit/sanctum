@@ -72,7 +72,7 @@ docker compose exec api python -m app.manage create-user --username NAME --name 
 
 Keep the `sanctum_secrets` volume safe and separate from backups of the data. Without its keys, nothing can be decrypted. Backups and administration are also available in the app under System health.
 
-Google sign-in is optional and off by default. To enable it, set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI`. It only matches existing active accounts by verified email, and password sign-in keeps working without internet access.
+Google sign-in is optional and off by default. To enable it, set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI`. It matches existing active accounts by verified email, and password sign-in keeps working without internet access. Setting `GOOGLE_SELF_SIGNUP=true` is a prototype convenience that creates an account on first Google sign-in and lets that person pick any role, including administrator, so keep it off anywhere other people can reach.
 
 ## Verify
 
