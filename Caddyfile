@@ -1,0 +1,17 @@
+(sanctum) {
+	handle /api/v1/* {
+		reverse_proxy api:8000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}
+
+http://localhost:8080 {
+	import sanctum
+}
+
+https://localhost:8443 {
+	tls internal
+	import sanctum
+}

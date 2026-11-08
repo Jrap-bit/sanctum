@@ -1,0 +1,141 @@
+x-backend: &x-backend
+  build: ./backend
+  image: sanctum-backend
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  volumes:
+    - sanctum_data:/data
+    - sanctum_secrets:/secrets
+  environment:
+    DATABASE_URL: postgresql+psycopg://sanctum:${POSTGRES_PASSWORD:-sanctum_local}@db:5432/sanctum
+    REDIS_URL: redis://redis:6379/0
+    ALLOWED_ORIGIN: http://localhost:8080
+    ALLOWED_ORIGINS: '["http://localhost:8080","https://localhost:8443"]'
+    COOKIE_SECURE: "false"
+    CLINIC_TIMEZONE: ${CLINIC_TIMEZONE:-Asia/Kolkata}
+    STORE_BACKEND: ${STORE_BACKEND:-filesystem}
+    STORE_PATH: /data/objects
+    BACKUP_PATH: /data/backups
+    MASTER_KEY_PATH: /secrets/master.key
+    WRAPPED_KEYS_PATH: /secrets/data-keys.json
+    LLM_BASE_URL: ${LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+    SUMMARY_MODEL: ${SUMMARY_MODEL:-qwen3:4b}
+    OCR_ENGINE: ${OCR_ENGINE:-tesseract}
+    GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sanctum
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sanctum_local}
+      POSTGRES_DB: sanctum
+    volumes:
+      - sanctum_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sanctum"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  key-init:
+    <<: *x-backend
+    command: python -m app.adapters.crypto
+    restart: "no"
+
+  migrate:
+    <<: *x-backend
+    command: alembic upgrade head
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+      key-init:
+        condition: service_completed_successfully
+
+  api:
+    <<: *x-backend
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  worker-extraction:
+    <<: *x-backend
+    command: python -m app.workers.extraction
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker-summary:
+    <<: *x-backend
+    command: python -m app.workers.summary
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    image: sanctum-web
+    restart: unless-stopped
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - sanctum_caddy:/data
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+  llm:
+    profiles:
+      - "cpu"
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    environment:
+      OLLAMA_NO_CLOUD: "1"
+    volumes:
+      - sanctum_llm:/root/.ollama
+    expose:
+      - "11434"
+
+volumes:
+  sanctum_pg:
+  sanctum_data:
+  sanctum_secrets:
+  sanctum_caddy:
+  sanctum_llm:

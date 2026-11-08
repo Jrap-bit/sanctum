@@ -1,5 +1,4 @@
 from PIL import Image
-from cryptography.fernet import InvalidToken
 from datetime import datetime
 from fastapi import HTTPException
 from hashlib import sha256
@@ -12,9 +11,12 @@ from sqlalchemy.exc import IntegrityError
 from uuid import uuid4
 import warnings
 
-from ..adapters.crypto import cipher
 from ..adapters.crypto import decrypt
+from ..adapters.crypto import decrypt_bytes
 from ..adapters.crypto import encrypt
+from ..adapters.crypto import encrypt_bytes
+from ..adapters.objectstore import get_store
+from ..core.exceptions import CiphertextIntegrityError
 from .auth import user_from_request
 from ..db.models import DocumentImport
 from ..db.models import ExtractionJob
@@ -121,33 +123,37 @@ def save_document(db, user, request, patient_id, raw, filename, content_type):
     if db.scalar(select(StoredDocument.id).where(StoredDocument.patient_id == patient.id, StoredDocument.digest == digest)):
         raise HTTPException(409, 'This file is already stored for this patient. Use the existing original.')
     doc_id = str(uuid4())
-    context = f'document:{patient.id}:{doc_id}'.encode() + b'\0'
-    row = StoredDocument(id=doc_id, patient_id=patient.id, uploaded_by=user.id, digest=digest,
-        metadata_payload=encrypt({'filename': name}, f'document-meta:{patient.id}:{doc_id}'),
-        original_payload=cipher().encrypt(context + raw), media_type=media_type,
-        page_count=pages, size_bytes=len(raw))
-    db.add(row)
-    db.add(PatientEvent(patient_id=patient.id, actor_id=user.id, kind='document', title='Document uploaded', event_date=None, version=1))
-    record_audit(db, request, user, 'document.upload', row.id)
+    key = f'patients/{patient.id}/documents/{doc_id}/original'
+    ciphertext = encrypt_bytes(raw, f'document:{patient.id}:{doc_id}')
+    store = get_store()
+    store.put(key, ciphertext, 'application/octet-stream')
     try:
+        row = StoredDocument(id=doc_id, patient_id=patient.id, uploaded_by=user.id, digest=digest,
+            metadata_payload=encrypt({'filename': name}, f'document-meta:{patient.id}:{doc_id}'),
+            object_key=key, media_type=media_type,
+            page_count=pages, size_bytes=len(raw))
+        db.add(row)
+        db.add(PatientEvent(patient_id=patient.id, actor_id=user.id, kind='document', title='Document uploaded', event_date=None, version=1))
+        record_audit(db, request, user, 'document.upload', row.id)
         db.flush()
         result = output(db, row)
         db.commit()
     except IntegrityError:
+        store.delete(key)
         db.rollback()
         raise HTTPException(409, 'This file is already stored for this patient.') from None
+    except Exception:
+        store.delete(key)
+        raise
     return result
 
 
 def original_bytes(row):
     try:
-        decoded = cipher().decrypt(row.original_payload)
-        context = f'document:{row.patient_id}:{row.id}'.encode() + b'\0'
-        if not decoded.startswith(context):
-            raise ValueError('Context mismatch')
-        raw = decoded[len(context):]
-        if len(raw) != row.size_bytes or sha256(raw).hexdigest() != row.digest:
-            raise ValueError('Integrity mismatch')
-    except (InvalidToken, ValueError):
+        data = get_store().get(row.object_key)
+    except FileNotFoundError:
         raise HTTPException(503, 'Protected document could not be read.') from None
+    raw = decrypt_bytes(data, f'document:{row.patient_id}:{row.id}')
+    if len(raw) != row.size_bytes or sha256(raw).hexdigest() != row.digest:
+        raise CiphertextIntegrityError('Document size or digest integrity failure.')
     return raw

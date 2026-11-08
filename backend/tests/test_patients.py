@@ -9,8 +9,9 @@ from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
-from app.adapters.crypto import initialize_key
+from app.adapters.crypto import initialize_key, reload_keys
 from app.adapters.crypto import encrypt
+from app.adapters.objectstore import reset_store
 from app.core.database import Base, get_db
 from app.main import app
 from app.manage import create_user
@@ -23,7 +24,12 @@ HEADERS = {"Origin": "http://localhost:3000"}
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
-    monkeypatch.setattr(get_settings(), "encryption_key_path", tmp_path / "clinical.key")
+    monkeypatch.setattr(get_settings(), "master_key", None)
+    monkeypatch.setattr(get_settings(), "master_key_path", tmp_path / "master.key")
+    monkeypatch.setattr(get_settings(), "wrapped_keys_path", tmp_path / "data-keys.json")
+    monkeypatch.setattr(get_settings(), "store_path", tmp_path / "storage" / "objects")
+    reload_keys()
+    reset_store()
     initialize_key()
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)
@@ -179,9 +185,10 @@ def test_missing_key_and_tampered_records_fail_without_plaintext(setup):
         db.get(Patient, patient["id"]).profile = db.get(Patient, other["id"]).profile
         db.commit()
     response = client.get(path(patient))
-    assert response.status_code == 503
+    assert response.status_code == 500
     assert "Secret other profile" not in response.text
-    get_settings().encryption_key_path.unlink()
+    get_settings().master_key_path.unlink()
+    reload_keys()
     assert client.post("/api/v1/patients", json={"displayName": "Fail safely"}).status_code == 503
 
 

@@ -7,6 +7,8 @@ from sqlalchemy import select, delete
 from sqlalchemy.exc import SQLAlchemyError
 from app.services import documents
 from app.adapters.crypto import decrypt
+from app.adapters.objectstore import get_store
+from app.core.config import get_settings
 from app.db.models import StoredDocument, PatientAccess, AuditEvent, PatientEvent
 from test_patients import setup, create, path, sign_in
 
@@ -39,7 +41,10 @@ def test_upload_list_download_and_encryption(setup, name, mime, raw):
     assert listing[0]['filename'] == name
     with factory() as db:
         row = db.get(StoredDocument, doc['id'])
-        assert row.original_payload != raw and not row.original_payload.startswith(raw[:8])
+        assert row.original_payload is None
+        assert row.object_key == f"patients/{patient['id']}/documents/{row.id}/original"
+        stored_bytes = get_store().get(row.object_key)
+        assert raw not in stored_bytes
         assert name.encode() not in row.metadata_payload
         assert decrypt(row.metadata_payload, f"document-meta:{patient['id']}:{row.id}")['filename'] == name
         assert db.scalar(select(AuditEvent).where(AuditEvent.action == 'document.upload', AuditEvent.target_id == row.id))
@@ -109,8 +114,15 @@ def test_multipart_shape_and_archive(setup):
 def test_tampered_ciphertext_is_not_downloaded(setup):
     c, factory, _ = setup; p = create(c); doc = upload(c,p).json()
     with factory() as db:
-        db.get(StoredDocument,doc['id']).original_payload=b'tampered'; db.commit()
-    assert c.get(path(p)+'/documents/'+doc['id']+'/original').status_code == 503
+        row = db.get(StoredDocument, doc['id'])
+        key = row.object_key
+    store = get_store()
+    ct = bytearray(store.get(key))
+    ct[-1] ^= 0x01
+    store.put(key, bytes(ct), 'application/octet-stream')
+    response = c.get(path(p)+'/documents/'+doc['id']+'/original')
+    assert response.status_code == 500
+    assert response.json()['code'] == 'RECORD_INTEGRITY_FAILED'
 
 
 def test_audit_failure_rolls_back_file_and_timeline(setup, monkeypatch):
@@ -121,6 +133,8 @@ def test_audit_failure_rolls_back_file_and_timeline(setup, monkeypatch):
     with factory() as db:
         assert db.scalar(select(StoredDocument)) is None
         assert db.scalar(select(PatientEvent).where(PatientEvent.kind=='document')) is None
+    store_path = get_settings().store_path
+    assert not any(p.is_file() for p in store_path.rglob("*"))
 
 
 def test_filename_is_sanitized(setup):
