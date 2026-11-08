@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     wrapped_keys_path: Path = Path(__file__).resolve().parents[2] / "secrets" / "data-keys.json"
 
     backup_path: Path = Path(__file__).resolve().parents[2] / "storage" / "backups"
+    backup_key_path: Path = Path(__file__).resolve().parents[2] / "secrets" / "backup.key"
 
     google_client_id: str | None = None
     google_client_secret: SecretStr | None = None

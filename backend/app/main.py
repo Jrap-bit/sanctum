@@ -24,6 +24,7 @@ from .api.model_catalog import router as model_catalog_router
 from .api.operations import router as operations_router
 from .api.reports import router as report_router
 from .api.ws import router as ws_router
+from .core.cache import in_maintenance
 from .core.errors import error, register_error_handlers
 
 app = FastAPI(title="Sanctum API", version="0.5.0")
@@ -39,6 +40,8 @@ async def request_safety(request: Request, call_next):
     origins = set(settings.allowed_origins) | {settings.allowed_origin}
     if request.method in {"POST", "PUT", "PATCH", "DELETE"} and request.headers.get("origin") not in origins:
         response = error(request, 403, "UNTRUSTED_ORIGIN", "Open Sanctum from its configured address.")
+    elif request.method in {"POST", "PUT", "PATCH", "DELETE"} and in_maintenance() and not request.url.path.startswith("/api/v1/admin/operations"):
+        response = error(request, 503, "MAINTENANCE", "Sanctum is being restored. Try again shortly.")
     else:
         response = await call_next(request)
     response.headers["X-Request-ID"] = request.state.request_id

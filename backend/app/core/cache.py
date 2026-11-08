@@ -21,6 +21,24 @@ def set_client(client):
     _client = client
 
 
+MAINTENANCE_KEY = "sanctum:maintenance"
+
+
+def set_maintenance(active):
+    client = get_redis()
+    if active:
+        client.set(MAINTENANCE_KEY, "1", ex=3600)
+    else:
+        client.delete(MAINTENANCE_KEY)
+
+
+def in_maintenance():
+    try:
+        return bool(get_redis().exists(MAINTENANCE_KEY))
+    except redis.RedisError:
+        return False
+
+
 def job_channel(job_id):
     return f"job:{job_id}:events"
 

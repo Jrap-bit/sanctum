@@ -36,6 +36,7 @@ class DocumentOutput(BaseModel):
     mediaType: str
     reviewState: str = "unreviewed"
     jobState: str = "not_started"
+    jobId: str | None = None
     progress: int = 0
     processingMessage: str | None = None
     version: int = 1
@@ -81,7 +82,7 @@ def output(db, row, user=None):
         pageCount=row.page_count,
         sizeBytes=row.size_bytes,
         mediaType=row.media_type,
-        jobState=state,
+        jobState=state, jobId=job.id if job else None,
         progress=int(job.completed_pages * 100 / row.page_count) if job else 0,
         processingMessage=job.message if job else None,
         allowedActions=actions,
