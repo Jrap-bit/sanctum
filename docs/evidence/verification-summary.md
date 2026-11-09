@@ -11,7 +11,7 @@ Partial implementation worth stating:
 | Area | Limitation |
 |---|---|
 | FR-08 withdrawal | Available only before import. After import, corrections are made by amending the historical notes. |
-| FR-01 Google sign-in | Tested with mocked Google responses. Never exercised against real Google. Off by default. |
+| FR-01 Google sign-in | Automated tests mock Google's responses. One real Google sign-in succeeded on the local stack on 8 Nov 2026, through `GOOGLE_SELF_SIGNUP` account creation and the role screen. Linking real Google to an administrator-created account was not tried. Off by default. |
 | FR-06 object store | The filesystem store is the tested default. The S3 adapter is implemented but not exercised against a real S3 server; MinIO images could not be pulled in this environment. |
 | FR-14 restore | Tested on one host. Fresh-host restore with a transferred deletion registry was not tested. |
 
