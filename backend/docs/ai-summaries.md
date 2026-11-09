@@ -22,7 +22,7 @@ No cloud model API or API key is used. Only loopback HTTP addresses are accepted
 ## Code map
 
 - `app/adapters/llm.py`: prepares the prompt and JSON schema, splits sources into numbered exact passages, asks Ollama to cite passage IDs, attaches the original text itself, and validates output shape and references. The model no longer has to reproduce quotations. Unknown references and unsupported quotations fail the job.
-- `app/api/summaries.py`: checks permissions and patient assignment, selects finalized current records, queues jobs, serves summaries, and records version-checked review decisions.
+- `app/api/insights/summaries.py`: checks permissions and patient assignment, selects finalized current records, queues jobs, serves summaries, and records version-checked review decisions.
 - `app/workers/summary.py`: claims durable jobs, calls the model outside the database transaction, rechecks access and source versions, and saves encrypted drafts. Cancellation prevents late output from being saved.
 - `app/db/models.py` and migration `0008_ai_summaries`: encrypted summary/job payloads and relational queue metadata.
 - Summary frontend pages: source selection, availability, progress, cancel/retry, previous drafts, quotations and separate review controls.

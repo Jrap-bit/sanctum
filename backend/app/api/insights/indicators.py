@@ -5,10 +5,10 @@ from pydantic import Field
 from typing import Literal
 from uuid import UUID
 
-from ..services import indicators as indicators_service
-from .deps import CurrentUser
-from .deps import Db
-from .schemas import VersionInput
+from ...services import indicators as indicators_service
+from ..deps import CurrentUser
+from ..deps import Db
+from ..schemas import VersionInput
 
 
 router = APIRouter(prefix="/api/v1/patients/{patient_id}/indicators", tags=["Indicators"])

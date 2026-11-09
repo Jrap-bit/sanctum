@@ -7,11 +7,11 @@ from fastapi import Request
 from pydantic import Field
 from pydantic import field_validator
 
-from ..services import grants as grants_service
-from .deps import CurrentUser
-from .deps import Db
-from .schemas import Input
-from .schemas import VersionInput
+from ...services import grants as grants_service
+from ..deps import CurrentUser
+from ..deps import Db
+from ..schemas import Input
+from ..schemas import VersionInput
 
 
 router = APIRouter(prefix="/api/v1/access/grants", tags=["Access requests"])

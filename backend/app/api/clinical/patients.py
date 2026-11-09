@@ -8,14 +8,14 @@ from fastapi import Request
 from pydantic import Field
 from pydantic import field_validator
 
-from ..services import patients as patients_service
-from ..services.patients import PatientList
-from ..services.patients import PatientOutput
-from ..services.patients import clinic_today
-from .deps import CurrentUser
-from .deps import Db
-from .schemas import Input
-from .schemas import VersionInput
+from ...services import patients as patients_service
+from ...services.patients import PatientList
+from ...services.patients import PatientOutput
+from ...services.patients import clinic_today
+from ..deps import CurrentUser
+from ..deps import Db
+from ..schemas import Input
+from ..schemas import VersionInput
 
 
 router = APIRouter(prefix="/api/v1", tags=["Patients"])

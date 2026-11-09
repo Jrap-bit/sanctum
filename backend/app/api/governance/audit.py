@@ -2,9 +2,9 @@ from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
 
-from ..services import audit_log as audit_log_service
-from .deps import CurrentUser
-from .deps import Db
+from ...services import audit_log as audit_log_service
+from ..deps import CurrentUser
+from ..deps import Db
 
 
 router = APIRouter(prefix="/api/v1/audit", tags=["Audit"])

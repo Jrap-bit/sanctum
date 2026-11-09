@@ -9,12 +9,12 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
 
-from ..core.capabilities import ACCOUNT_PRESETS
-from ..services import accounts as accounts_service
-from ..services.accounts import AccountResult
-from ..services.accounts import AdminUserOutput
-from .deps import CurrentUser
-from .deps import Db
+from ...core.capabilities import ACCOUNT_PRESETS
+from ...services import accounts as accounts_service
+from ...services.accounts import AccountResult
+from ...services.accounts import AdminUserOutput
+from ..deps import CurrentUser
+from ..deps import Db
 
 
 router = APIRouter(prefix="/api/v1/admin/users", tags=["Account administration"])

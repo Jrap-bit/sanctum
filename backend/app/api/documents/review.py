@@ -7,13 +7,13 @@ from fastapi import Request
 from pydantic import Field
 from pydantic import model_validator
 
-from ..services import review as review_service
-from ..services.patients import clinic_today
-from .deps import CurrentUser
-from .deps import Db
+from ...services import review as review_service
+from ...services.patients import clinic_today
+from ..deps import CurrentUser
+from ..deps import Db
 from .processing import PREFIX
-from .schemas import Input
-from .schemas import VersionInput
+from ..schemas import Input
+from ..schemas import VersionInput
 
 
 router = APIRouter(tags=["Document review"])

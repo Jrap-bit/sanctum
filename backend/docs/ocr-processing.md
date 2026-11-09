@@ -4,7 +4,7 @@ Implemented 5 November 2026. A clinician with access to the patient opens Docume
 
 ## What the code does
 
-- `app/api/processing.py`: authorises start/retry/cancel, returns completed draft pages and lists recent processing jobs for operations administrators.
+- `app/api/documents/processing.py`: authorises start/retry/cancel, returns completed draft pages and lists recent processing jobs for operations administrators.
 - `app/workers/extraction.py`: claims durable PostgreSQL jobs, processes pages, encrypts results, records progress and audit events. Run it separately from FastAPI.
 - `app/adapters/extract_page.py`: runs page processing in an isolated child process. PDFium reads existing text and renders scanned pages; local Tesseract recognises image text. Original bytes and rendered images travel through memory/pipes rather than plaintext temporary files.
 - `ExtractionJob`: one current processing record per document. States are queued, running, completed, failed and cancelled.

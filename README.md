@@ -52,6 +52,12 @@ workers: extraction (OCR), summary (LLM)           -> model runtime over HTTP
 ```
 backend/app/
   api/        routes and request models only
+    access/       sign-in, accounts, access grants
+    clinical/     patients, sessions, concerns, medications, ratings
+    documents/    upload, OCR processing, page review
+    insights/     AI summaries, model catalog, indicators, reports
+    governance/   audit log, operations, decision rules
+    deps.py, schemas.py, ws.py   shared dependencies and the WebSocket route
   services/   use cases: authorisation, transactions, audit
   domain/     pure logic, including decision tables DT-01 to DT-05
   adapters/   encryption, OCR, PDF text, LLM engines, object store, report PDF

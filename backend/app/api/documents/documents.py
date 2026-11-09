@@ -9,10 +9,10 @@ from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException
 from starlette.formparsers import MultiPartParser
 
-from ..services import documents as document_service
-from ..services.documents import DocumentOutput
-from .deps import CurrentUser
-from .deps import Db
+from ...services import documents as document_service
+from ...services.documents import DocumentOutput
+from ..deps import CurrentUser
+from ..deps import Db
 
 
 router = APIRouter(prefix="/api/v1/patients/{patient_id}/documents", tags=["Documents"])

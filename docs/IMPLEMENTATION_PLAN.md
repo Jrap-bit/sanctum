@@ -189,7 +189,7 @@ subprocess path updated. Gate: all 16 test files still pass. Abort = `git checko
 |---|---|
 | Docker | `backend/Dockerfile`, root `docker-compose.yml`, `Caddyfile`, `.dockerignore`, CPU LLM profile |
 | Crypto + object store | `adapters/crypto.py` per §1, `adapters/objectstore.py`, rewire original upload/read, drop `original_payload` use (C1–C5, S10). One worker because both rewrite the same path. **Default `STORE=filesystem`** with the S3 adapter registered: `minio/minio` and `quay.io/minio/minio` both refused the pull here |
-| Reports **FR-13** + audit read | `api/reports.py`, `services/reports.py`, `adapters/report_pdf.py`, `api/audit.py`, tests |
+| Reports **FR-13** + audit read | `api/insights/reports.py`, `services/reports.py`, `adapters/report_pdf.py`, `api/governance/audit.py`, tests |
 
 **Wave 3 — 3 workers, parallel.** Split so no two touch the same worker module.
 
@@ -197,7 +197,7 @@ subprocess path updated. Gate: all 16 test files still pass. Abort = `git checko
 |---|---|
 | Identity | Redis session store, 15-min idle + 8-h absolute, progressive rate limit (S4, S5), **Google OAuth2** as an optional sign-in matched to existing active users only |
 | OCR pipeline + live progress | OCR/PDF factories, `workers/extraction.py`, raw text to Redis + re-extract (S11), `api/ws.py` |
-| LLM | OpenAI-compatible adapter replacing S9, model registry, `api/model_catalog.py`, per-request model, `workers/summary.py` progress |
+| LLM | OpenAI-compatible adapter replacing S9, model registry, `api/insights/model_catalog.py`, per-request model, `workers/summary.py` progress |
 
 **Wave 4 — 2 workers.** Deletion + backup/restore (`services/operations.py`, manage commands);
 frontend (`lib/ws.ts`, progress bars replacing polling as primary, model picker, Google sign-in button, remove the assignments page dependency).

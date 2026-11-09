@@ -2,9 +2,9 @@
 from fastapi import APIRouter
 from fastapi import HTTPException
 
-from ..adapters import llm as ai
-from ..core.config import get_settings
-from .deps import CurrentUser
+from ...adapters import llm as ai
+from ...core.config import get_settings
+from ..deps import CurrentUser
 
 
 router = APIRouter(tags=["Model catalog"])

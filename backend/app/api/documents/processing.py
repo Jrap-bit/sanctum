@@ -4,9 +4,9 @@ from uuid import UUID
 from fastapi import APIRouter
 from fastapi import Request
 
-from ..services import processing as processing_service
-from .deps import CurrentUser
-from .deps import Db
+from ...services import processing as processing_service
+from ..deps import CurrentUser
+from ..deps import Db
 
 
 router = APIRouter(tags=["Document processing"])

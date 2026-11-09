@@ -2,27 +2,27 @@ from fastapi import FastAPI
 from fastapi import Request
 from uuid import uuid4
 
-from .api.admin_users import router as admin_router
-from .api.auth import router as auth_router
-from .api.concerns import router as concern_router
-from .api.documents import router as document_router
-from .api.grants import router as grant_router
-from .api.indicators import router as indicator_router
-from .api.medications import router as medication_router
-from .api.patients import router as patient_router
-from .api.processing import router as processing_router
-from .api.ratings import router as rating_router
-from .api.review import router as review_router
-from .api.rules import router as rule_router
-from .api.sessions import router as session_router
-from .api.summaries import router as summary_router
+from .api.access.admin_users import router as admin_router
+from .api.access.auth import router as auth_router
+from .api.clinical.concerns import router as concern_router
+from .api.documents.documents import router as document_router
+from .api.access.grants import router as grant_router
+from .api.insights.indicators import router as indicator_router
+from .api.clinical.medications import router as medication_router
+from .api.clinical.patients import router as patient_router
+from .api.documents.processing import router as processing_router
+from .api.clinical.ratings import router as rating_router
+from .api.documents.review import router as review_router
+from .api.governance.rules import router as rule_router
+from .api.clinical.sessions import router as session_router
+from .api.insights.summaries import router as summary_router
 from .core.config import get_settings
 
 
-from .api.audit import router as audit_router
-from .api.model_catalog import router as model_catalog_router
-from .api.operations import router as operations_router
-from .api.reports import router as report_router
+from .api.governance.audit import router as audit_router
+from .api.insights.model_catalog import router as model_catalog_router
+from .api.governance.operations import router as operations_router
+from .api.insights.reports import router as report_router
 from .api.ws import router as ws_router
 from .core.cache import in_maintenance
 from .core.errors import error, register_error_handlers

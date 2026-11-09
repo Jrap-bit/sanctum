@@ -5,10 +5,10 @@ from fastapi import Request
 from fastapi import Response
 from pydantic import Field
 
-from ..services import reports as reports_service
-from .deps import CurrentUser
-from .deps import Db
-from .schemas import Input
+from ...services import reports as reports_service
+from ..deps import CurrentUser
+from ..deps import Db
+from ..schemas import Input
 
 
 router = APIRouter(prefix="/api/v1/patients/{patient_id}/reports", tags=["Reports"])

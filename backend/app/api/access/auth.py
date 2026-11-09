@@ -9,14 +9,14 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
 
-from ..core.config import get_settings
-from ..core.security import COOKIE_NAME
-from ..services import auth as auth_service
-from ..services.auth import UserOutput
-from ..services.auth import issue_session
-from ..services.auth import public_user
-from .deps import CurrentUser
-from .deps import Db
+from ...core.config import get_settings
+from ...core.security import COOKIE_NAME
+from ...services import auth as auth_service
+from ...services.auth import UserOutput
+from ...services.auth import issue_session
+from ...services.auth import public_user
+from ..deps import CurrentUser
+from ..deps import Db
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])

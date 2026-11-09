@@ -5,9 +5,9 @@ from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import field_validator
 
-from ..services import operations as operations_service
-from .deps import CurrentUser
-from .deps import Db
+from ...services import operations as operations_service
+from ..deps import CurrentUser
+from ..deps import Db
 
 
 router = APIRouter(prefix="/api/v1", tags=["Operations"])

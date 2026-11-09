@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from app.services import indicators
 from app.domain.rules.dt03_followup_outstanding import follow_up_result
-from app.api import indicators as indicators_api
+from app.api.insights import indicators as indicators_api
 from app.db.models import IndicatorRun
 from app.adapters.crypto import decrypt
 from test_patients import setup,create,path,sign_in

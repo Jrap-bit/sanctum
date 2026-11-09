@@ -6,11 +6,11 @@ from pydantic import field_validator
 from typing import Literal
 from uuid import UUID
 
-from ..services import medications as medications_service
-from .deps import CurrentUser
-from .deps import Db
-from .schemas import Input
-from .schemas import VersionInput
+from ...services import medications as medications_service
+from ..deps import CurrentUser
+from ..deps import Db
+from ..schemas import Input
+from ..schemas import VersionInput
 
 
 router = APIRouter(prefix="/api/v1/patients/{patient_id}/medications", tags=["Confirmed medications"])

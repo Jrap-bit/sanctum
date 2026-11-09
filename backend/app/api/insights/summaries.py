@@ -7,12 +7,12 @@ from fastapi import Request
 from pydantic import Field
 from pydantic import model_validator
 
-from ..core.config import get_settings
-from ..services import summaries as summaries_service
-from .deps import CurrentUser
-from .deps import Db
-from .schemas import Input
-from .schemas import VersionInput
+from ...core.config import get_settings
+from ...services import summaries as summaries_service
+from ..deps import CurrentUser
+from ..deps import Db
+from ..schemas import Input
+from ..schemas import VersionInput
 
 
 router = APIRouter(tags=["AI summaries"])

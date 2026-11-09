@@ -10,7 +10,7 @@ Uploading a file does not create a session note or approve its contents. It adds
 
 ## Code and purpose
 
-- `app/api/documents.py`: upload, validation, duplicate detection, listing and protected downloads.
+- `app/api/documents/documents.py`: upload, validation, duplicate detection, listing and protected downloads.
 - `StoredDocument` in `app/db/models.py`: stores the patient/uploader IDs, encrypted filename, encrypted original, byte count, page count, media type and content digest. Original bytes are loaded only when needed, not when listing files.
 - Migration `0005_documents`: creates this storage table and a database uniqueness rule for patient plus content digest.
 - Existing encryption key: encrypts the originals and filenames. Each ciphertext includes its patient/document identity, so swapping encrypted records fails validation.

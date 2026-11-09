@@ -6,10 +6,10 @@ from pydantic import StrictBool
 from pydantic import StrictInt
 from pydantic import field_validator
 
-from ..services import rules as rules_service
-from .deps import CurrentUser
-from .deps import Db
-from .schemas import VersionInput
+from ...services import rules as rules_service
+from ..deps import CurrentUser
+from ..deps import Db
+from ..schemas import VersionInput
 
 
 router = APIRouter(tags=["Rule settings"])
