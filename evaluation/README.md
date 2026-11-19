@@ -15,7 +15,7 @@ The harness evaluates:
   - Six synthetic OCR pages with ground truth (3 large clean font, 2 noisy with 1-degree rotation via Pillow, 1 small font).
   - Five fixed synthetic clinical LLM cases with required faithful phrases and forbidden unsupported assertions (covering negation, historical timing, and prompt injection).
 - `fixtures/handwritten/`: Fixture directory for real handwritten samples. Any `.png` file with a sibling `.txt` ground truth is evaluated and reported under handwritten OCR. If empty, handwritten evaluation reports `handwritten: not measured`.
-- `backend/tests/test_evaluation_metrics.py`: Unit test suite verifying metric calculation (CER, WER, normalisation, empty references, p50/p95, phrase recall).
+- `backend/tests/unit/test_evaluation_metrics.py`: Unit test suite verifying metric calculation (CER, WER, normalisation, empty references, p50/p95, phrase recall).
 
 ## Running the Evaluation
 
@@ -34,7 +34,7 @@ cd backend && .venv313/bin/python ../evaluation/run_eval.py [--models model1,mod
 The metric functions (CER, WER, normalisation, empty reference handling, latency percentiles, and phrase recall) are tested via pytest:
 
 ```bash
-cd backend && .venv313/bin/python -m pytest tests/test_evaluation_metrics.py -q
+cd backend && .venv313/bin/python -m pytest tests/unit/test_evaluation_metrics.py -q
 ```
 
 ## Metrics & Reporting

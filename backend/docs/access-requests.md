@@ -16,4 +16,4 @@ Patient access is checked on each request. Revocation removes only that grant, p
 6. As oversight, revoke the grant with a reason. Refresh as Bob: Alex is no longer accessible unless Bob has another independent grant or assignment.
 7. Repeat with View and edit to test writing. Rejecting or cancelling a request must not give access.
 
-Run `python -m pytest tests/test_grants.py -q` from backend with the virtual environment active. Apply migration 0014 with `alembic upgrade head` before starting the updated backend or workers.
+Run `python -m pytest tests/integration/test_grants.py -q` from backend with the virtual environment active. Apply migration 0014 with `alembic upgrade head` before starting the updated backend or workers.

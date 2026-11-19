@@ -10,21 +10,21 @@ import time
 from pathlib import Path
 
 MAPPING = [
-    ("T-01", "FR-01", "Authentication and access control", ["test_auth.py", "test_access_audit.py", "test_oauth.py", "test_grants.py"]),
-    ("T-02", "FR-02", "User account management", ["test_admin_users.py"]),
-    ("T-03", "FR-03", "Patient profile management", ["test_patients.py"]),
-    ("T-04", "FR-04", "Session notes and amendments", ["test_sessions.py"]),
-    ("T-05", "FR-05", "Patient clinical history", ["test_patients.py", "test_document_review.py"]),
-    ("T-06", "FR-06", "Document upload and storage", ["test_documents.py", "test_objectstore.py"]),
-    ("T-07", "FR-07", "Local text extraction and OCR", ["test_processing.py", "test_extraction_adapters.py", "test_ws.py"]),
-    ("T-08", "FR-08", "Transcription review and import", ["test_document_review.py"]),
-    ("T-09", "FR-09", "AI summaries and labels", ["test_summaries.py", "test_llm_engines.py"]),
-    ("T-10", "FR-10", "AI output review and fact verification", ["test_summaries.py"]),
-    ("T-11", "FR-11", "Rule-based indicators", ["test_truth_tables.py", "test_indicators.py", "test_rules.py", "test_ratings.py", "test_concerns.py", "test_medications.py", "test_documentation.py"]),
-    ("T-12", "FR-12", "Follow-up tasks", ["test_patients.py", "test_indicators.py"]),
-    ("T-13", "FR-13", "Report generation and export", ["test_reports.py"]),
-    ("T-14", "FR-14", "Audit and data recovery", ["test_audit.py", "test_operations.py"]),
-    ("T-15", "FR-15", "Data security and deletion", ["test_crypto.py", "test_operations.py", "test_access_audit.py"]),
+    ("T-01", "FR-01", "Authentication and access control", ["integration/test_auth.py", "integration/test_access_audit.py", "integration/test_oauth.py", "integration/test_grants.py"]),
+    ("T-02", "FR-02", "User account management", ["integration/test_admin_users.py"]),
+    ("T-03", "FR-03", "Patient profile management", ["integration/test_patients.py"]),
+    ("T-04", "FR-04", "Session notes and amendments", ["integration/test_sessions.py"]),
+    ("T-05", "FR-05", "Patient clinical history", ["integration/test_patients.py", "integration/test_document_review.py"]),
+    ("T-06", "FR-06", "Document upload and storage", ["integration/test_documents.py", "integration/test_objectstore.py", "unit/test_objectstore_registry.py"]),
+    ("T-07", "FR-07", "Local text extraction and OCR", ["integration/test_processing.py", "unit/test_extraction_adapters.py", "integration/test_ws.py"]),
+    ("T-08", "FR-08", "Transcription review and import", ["integration/test_document_review.py"]),
+    ("T-09", "FR-09", "AI summaries and labels", ["integration/test_summaries.py", "unit/test_summary_grounding.py", "unit/test_llm_engines.py"]),
+    ("T-10", "FR-10", "AI output review and fact verification", ["integration/test_summaries.py", "unit/test_summary_grounding.py"]),
+    ("T-11", "FR-11", "Rule-based indicators", ["unit/test_truth_tables.py", "integration/test_indicators.py", "unit/test_followup_rule.py", "integration/test_rules.py", "unit/test_rule_thresholds.py", "integration/test_ratings.py", "unit/test_rating_rule.py", "integration/test_concerns.py", "unit/test_concern_rule.py", "integration/test_medications.py", "unit/test_medication_rule.py", "integration/test_documentation.py", "unit/test_documentation_rule.py"]),
+    ("T-12", "FR-12", "Follow-up tasks", ["integration/test_patients.py", "integration/test_indicators.py", "unit/test_followup_rule.py"]),
+    ("T-13", "FR-13", "Report generation and export", ["integration/test_reports.py"]),
+    ("T-14", "FR-14", "Audit and data recovery", ["integration/test_audit.py", "integration/test_operations.py"]),
+    ("T-15", "FR-15", "Data security and deletion", ["integration/test_crypto.py", "integration/test_operations.py", "integration/test_access_audit.py"]),
 ]
 
 
