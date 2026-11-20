@@ -36,3 +36,10 @@ def test_incompatible_or_missing(values):
 def test_inclusive_window_and_latest_pair_only():
  assert rating_results([row('2026-10-07',4),row('2026-11-06',6)],date(2026,11,6))[0]['outcome']=='matched'
  assert rating_results([row('2026-11-01',2),row('2026-11-04',6),row('2026-11-06',5)],date(2026,11,6))[0]['outcome']=='not_matched'
+
+
+@pytest.mark.unit
+def test_scale_names_pair_case_insensitively():
+ """DT-02: names are compared case-insensitively, so 'Anxiety' and 'anxiety' form one pair."""
+ result=rating_results([row('2026-11-01',4,scaleName='Anxiety'),row('2026-11-06',6,scaleName='anxiety')],date(2026,11,6))
+ assert len(result)==1 and result[0]['outcome']=='matched'

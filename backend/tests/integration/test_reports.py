@@ -281,3 +281,37 @@ def test_user_without_reports_write_gets_403(setup):
     assert client.get(path(patient) + "/reports/eligible-sources").status_code == 403
     assert client.post(path(patient) + "/reports/preview", json={"sourceVersions": [{"id": n1["id"], "version": n1["version"], "type": "session"}]}).status_code == 403
     assert client.get(path(patient) + f"/reports/{report_id}/export").status_code == 403
+
+
+@pytest.mark.integration
+def test_revoked_grant_holder_cannot_export_their_preview(setup):
+    """TC-37: a user who made a preview under a grant gets no PDF once that grant is revoked."""
+    from app.manage import create_user
+    from test_patients import PASSWORD
+
+    client, factory, _ = setup
+    patient = create(client)
+    n1 = finalize_note(client, patient, save_note(client, patient, create_note(client, patient, "2026-01-10"), "Session", "2026-01-10"))
+    with factory() as db:
+        create_user(db, "reviewer", "Reviewer", "oversight", PASSWORD)
+    grants = "/api/v1/access/grants"
+    sign_in(client, "bob")
+    grant = client.post(grants, json={"patientId": patient["id"], "capability": "clinical:read", "reason": "Coverage"}).json()
+    sign_in(client, "reviewer")
+    grant = client.post(f"{grants}/{grant['id']}/review", json={"expectedVersion": grant["version"], "decision": "approve", "comment": "Approved"}).json()
+
+    sign_in(client, "bob")
+    preview = client.post(path(patient) + "/reports/preview", json={"sourceVersions": [{"id": n1["id"], "version": n1["version"], "type": "session"}]})
+    assert preview.status_code == 200, preview.text
+    export_url = path(patient) + f"/reports/{preview.json()['id']}/export"
+
+    sign_in(client, "reviewer")
+    revoked = client.post(f"{grants}/{grant['id']}/revoke", json={"expectedVersion": grant["version"], "reason": "Coverage ended"})
+    assert revoked.status_code == 200, revoked.text
+
+    sign_in(client, "bob")
+    response = client.get(export_url)
+    assert response.status_code == 404
+    assert not response.content.startswith(b"%PDF")
+    with factory() as db:
+        assert db.query(AuditEvent).filter(AuditEvent.action == "report.export").count() == 0

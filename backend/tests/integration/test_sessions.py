@@ -244,3 +244,40 @@ def test_session_creation_after_future_follow_up(setup):
         assert client.get(url(patient, note)).status_code == 200
     tasks = client.get(path(patient) + '/follow-ups').json()['items']
     assert next(t for t in tasks if t['id'] == follow_up.json()['id'])['dueDate'] == future
+
+
+@pytest.mark.integration
+def test_narrative_and_structured_section_limits(setup):
+    """SRS 3.4.4: narrative is bounded at 100,000 characters and each structured section at 100 entries."""
+    client, _, _ = setup
+    patient = create(client)
+    note = new_note(client, patient)
+    assert client.patch(url(patient, note), json=content(note, text="x" * 100_001)).status_code == 422
+    assert client.get(url(patient, note)).json()["version"] == note["version"]
+    note = saved(client, patient, note, text="x" * 100_000)
+    entry = {"text": "Synthetic observation", "assertion": "present", "temporality": "current"}
+    for section in ("concerns", "observations", "interventions", "medicationReported"):
+        assert client.patch(url(patient, note), json=content(note, **{section: [entry] * 101})).status_code == 422
+    note = saved(client, patient, note, **{s: [entry] * 100 for s in ("concerns", "observations", "interventions", "medicationReported")})
+    assert len(note["concerns"]) == 100 and len(note["text"]) == 100_000
+
+
+@pytest.mark.integration
+def test_session_date_uses_clinic_timezone(setup, monkeypatch):
+    """SRS 3.4.4: clinical dates follow Asia/Kolkata, not UTC or the browser clock."""
+    from datetime import datetime, timezone
+    from app.services import patients as patient_service
+
+    instant = datetime(2026, 11, 5, 20, 0, tzinfo=timezone.utc)  # 01:30 on 6 November in Kolkata
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
+
+    monkeypatch.setattr(patient_service, "datetime", FrozenDateTime)
+    client, _, _ = setup
+    patient = create(client)
+    assert new_note(client, patient, "2026-11-06")["eventDate"] == "2026-11-06"
+    response = client.post(path(patient) + "/sessions", json={"eventDate": "2026-11-07"})
+    assert response.status_code == 422

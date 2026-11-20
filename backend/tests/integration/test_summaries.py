@@ -200,3 +200,14 @@ def test_progress_publish_happens(setup, monkeypatch):
     assert len(deltas) > 0 and TEXT in deltas[0]
     states = [kwargs.get('state') for _, kwargs in events]
     assert 'completed' in states
+
+
+@pytest.mark.integration
+def test_identical_request_replay_returns_the_same_job(setup):
+    """TC-24: resending the same request with the same key creates no duplicate work."""
+    c,factory,_=setup;p,n,b=prepare(c);base=path(p)+'/summaries'
+    first=c.post(base,json=b);assert first.status_code==202,first.text
+    second=c.post(base,json=b);assert second.status_code in (200,202),second.text
+    assert second.json()['id']==first.json()['id']
+    with factory() as db:
+        assert len(db.scalars(select(SummaryJob).where(SummaryJob.patient_id==p['id'])).all())==1

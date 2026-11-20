@@ -183,3 +183,43 @@ def test_filename_is_sanitized(setup):
     r = upload(c, p, name='../../private/record.pdf')
     assert r.status_code == 201
     assert r.json()['filename'] == 'record.pdf'
+
+
+def pdf_pages(count):
+    stream = BytesIO()
+    writer = PdfWriter()
+    for _ in range(count):
+        writer.add_blank_page(width=72, height=72)
+    writer.write(stream)
+    return stream.getvalue()
+
+
+def animated_png():
+    stream = BytesIO()
+    frames = [Image.new('RGB', (8, 8), colour) for colour in ('white', 'black')]
+    frames[0].save(stream, format='PNG', save_all=True, append_images=frames[1:])
+    return stream.getvalue()
+
+
+def large_png(pixels):
+    stream = BytesIO()
+    Image.new('L', (pixels // 4000, 4000), 255).save(stream, format='PNG')
+    return stream.getvalue()
+
+
+@pytest.mark.parametrize('raw,name,mime,status', [
+    (pdf_pages(500), 'max.pdf', 'application/pdf', 201),
+    (pdf_pages(501), 'over.pdf', 'application/pdf', 422),
+    (animated_png(), 'animated.png', 'image/png', 422),
+    (large_png(20_000_000), 'max.png', 'image/png', 201),
+    (large_png(20_004_000), 'over.png', 'image/png', 422),
+], ids=['500-pages-accepted', '501-pages-refused', 'animated-refused', '20mp-accepted', 'over-20mp-refused'])
+@pytest.mark.integration
+def test_page_frame_and_pixel_limits(setup, raw, name, mime, status):
+    """SRS 3.4.4 / TC-16: PDFs are capped at 500 pages, images at 20 megapixels and one frame."""
+    c, factory, _ = setup
+    p = create(c)
+    response = upload(c, p, raw, name, mime)
+    assert response.status_code == status, response.text
+    with factory() as db:
+        assert (db.scalar(select(StoredDocument)) is not None) == (status == 201)
